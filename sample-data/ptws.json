@@ -48,12 +48,12 @@
     {
       "permit_id": "PTW-2026-005",
       "work_type": "INSPECTION",
-      "scope": "Separator inspection",
-      "location": ["S-101"],
-      "start_time": "2026-09-05T13:00:00",
-      "end_time": "2026-09-05T14:00:00",
+      "scope": "Inspection around G-101 and V-101; exact isolation dependency is not confirmed.",
+      "location": ["G-101", "V-101"],
+      "start_time": "2026-09-05T11:30:00",
+      "end_time": "2026-09-05T12:30:00",
       "issuer": "ENGINEER-02",
-      "equipment_tags": ["S-101"],
+      "equipment_tags": ["G-101", "V-101"],
       "isolation_points": []
     },
     {
