@@ -1,0 +1,63 @@
+{
+  "plant_id": "MockRefinery",
+  "scenarios": [
+    {
+      "scenario_id": "scenario-safe-01",
+      "description": "Routine inspection of T-101 with no overlapping conflicting permit.",
+      "permit_ids": [
+        "PTW-2026-001"
+      ],
+      "expected_rule_result": "PASS",
+      "expected_final_decision": "PASS",
+      "expected_conflict_rule": null,
+      "confidence": "HIGH"
+    },
+    {
+      "scenario_id": "scenario-conflict-01",
+      "description": "Hot work near L-101 while V-101 isolation is temporarily reopened.",
+      "permit_ids": [
+        "PTW-2026-014",
+        "PTW-2026-009"
+      ],
+      "expected_rule_result": "FLAGGED",
+      "expected_final_decision": "FLAGGED_FOR_REVIEW",
+      "expected_conflict_rule": "ISOLATION_OVERLAP_TIME_WINDOW",
+      "confidence": "HIGH"
+    },
+    {
+      "scenario_id": "scenario-conflict-02",
+      "description": "Pump maintenance and heat exchanger inspection both depend on V-102 during an overlapping time window.",
+      "permit_ids": [
+        "PTW-2026-002",
+        "PTW-2026-004"
+      ],
+      "expected_rule_result": "FLAGGED",
+      "expected_final_decision": "FLAGGED_FOR_REVIEW",
+      "expected_conflict_rule": "ISOLATION_OVERLAP_TIME_WINDOW",
+      "confidence": "HIGH"
+    },
+    {
+      "scenario_id": "scenario-conflict-03",
+      "description": "Gauge inspection using V-101 isolation overlaps with the controlled V-101 reopening permit.",
+      "permit_ids": [
+        "PTW-2026-003",
+        "PTW-2026-009"
+      ],
+      "expected_rule_result": "FLAGGED",
+      "expected_final_decision": "FLAGGED_FOR_REVIEW",
+      "expected_conflict_rule": "ISOLATION_OVERLAP_TIME_WINDOW",
+      "confidence": "HIGH"
+    },
+    {
+      "scenario_id": "scenario-ambiguous-01",
+      "description": "Inspection involving V-101 and G-101 has insufficient certainty about the exact isolation dependency and must be escalated for human review.",
+      "permit_ids": [
+        "PTW-2026-003"
+      ],
+      "expected_rule_result": "FLAGGED",
+      "expected_final_decision": "REVIEW_REQUIRED",
+      "expected_conflict_rule": null,
+      "confidence": "LOW"
+    }
+  ]
+}
