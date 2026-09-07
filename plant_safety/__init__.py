@@ -6,10 +6,13 @@ checking, and deterministic safety-rule evaluation for the VYOMA pipeline.
 
 from plant_safety.topology import PlantGraph, TopologyError
 from plant_safety.tag_resolution import TagResolver, TagResolutionResult
+from plant_safety.graph_facts import GraphFactsBuilder, GraphFactsError
 
 __all__ = [
     "PlantGraph",
     "TopologyError",
     "TagResolver",
     "TagResolutionResult",
+    "GraphFactsBuilder",
+    "GraphFactsError",
 ]
