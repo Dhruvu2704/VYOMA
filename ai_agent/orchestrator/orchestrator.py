@@ -243,11 +243,18 @@ class AgentOrchestrator:
                 "reason",
                 "cannot reason without ptw, graph_facts and rule_verdict",
             )
+        # Route reasoning through the configured engine, passing the full
+        # structured context. The engine (deterministic or provider-backed)
+        # grounds its conclusion in the supplied evidence; it never invents
+        # facts and never silently overrides the safety rule result.
         state.llm_result = self.reasoning.reason(
             ptw=state.structured_ptw,
             graph_facts=state.graph_facts,
             rule_verdict=state.rule_verdict,
             retrieved=state.rag_context,
+            structured_pid=state.structured_pid,
+            active_permits=state.active_permits,
+            task=state._task_request,
         )
         return state
 
