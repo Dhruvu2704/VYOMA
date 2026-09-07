@@ -1,23 +1,24 @@
 """Top-level Agent Orchestrator.
 
-Milestone 1 pipeline for a single fixture:
+Day 1 controlled workflow engine for a single task:
 
-    PERCEIVE -> UNDERSTAND -> PLAN -> RETRIEVE -> REASON -> VERIFY
-    -> FINAL VERDICT -> LOG
+    PERCEIVE -> UNDERSTAND -> PLAN -> RETRIEVE -> USE TOOL -> REASON
+    -> VERIFY -> ACT -> LOG
 
 The orchestrator is model-agnostic: it depends on the reasoning interface,
 the rule verdicts/graph facts (evidence), the retriever interface, and the
 model router for categorization. No LLM or external service is invoked in
 Milestone 1 — reasoning is deterministic and evidence-only.
 
-Audit: an internal, in-memory audit representation is produced and returned.
-It is NOT persisted to the backend yet.
+``AgentState`` is the single state object threaded through every stage.
+A failed stage records the error, identifies the failed stage, and prevents
+a fake approval. It never silently continues as if the failed operation had
+succeeded.
 """
 
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,22 +28,27 @@ from shared.contracts import (
     AuditEvent,
     AuditLogger,
     GraphFacts,
-    LLMReasoningResult,
     OrchestratorResult,
     PlanStep,
     RuleVerdict,
     StructuredPTW,
-    TaskRequest,
-    VerificationResult,
 )
 
+from ai_agent.agent_state import (
+    AgentState,
+    ExecutionTraceEntry,
+    StageError,
+)
 from ai_agent.audit import InMemoryAuditLogger
+from ai_agent.planner import TaskAwarePlanner
 from ai_agent.rag.retriever import Retriever, build_retriever
 from ai_agent.reasoning.reasoning_engine import (
     DeterministicReasoningEngine,
     ReasoningEngine,
 )
 from ai_agent.router.model_router import ModelRouter, build_router
+from ai_agent.task_classifier import TaskClassifier, TaskType
+from ai_agent.tool_registry import ToolRegistry, ToolRegistryError
 from ai_agent.verification import VerificationEngine
 
 
@@ -50,8 +56,33 @@ class OrchestratorError(Exception):
     """Raised when a fixture cannot be run through the pipeline."""
 
 
+class StageFailure(Exception):
+    """Internal signal that a pipeline stage failed.
+
+    Carries the name of the failed stage so the orchestrator can record it
+    on ``AgentState``.
+    """
+
+    def __init__(self, stage: str, message: str) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.message = message
+
+
 class AgentOrchestrator:
-    """Runs the full Role 1 evidence pipeline against a fixture."""
+    """Runs the full Role 1 controlled workflow over ``AgentState``."""
+
+    PIPELINE_STAGES: List[str] = [
+        "perceive",
+        "understand",
+        "plan",
+        "retrieve",
+        "use_tool",
+        "reason",
+        "verify",
+        "act",
+        "log",
+    ]
 
     def __init__(
         self,
@@ -59,101 +90,180 @@ class AgentOrchestrator:
         retriever: Optional[Retriever] = None,
         router: Optional[ModelRouter] = None,
         audit_logger: Optional[AuditLogger] = None,
+        classifier: Optional[TaskClassifier] = None,
+        planner: Optional[TaskAwarePlanner] = None,
+        tool_registry: Optional[ToolRegistry] = None,
     ) -> None:
         self.reasoning = reasoning_engine or DeterministicReasoningEngine()
         self.retriever = retriever or build_retriever()
         self.router = router or build_router()
         self.verifier = VerificationEngine()
+        self.classifier = classifier or TaskClassifier()
+        self.planner = planner or TaskAwarePlanner(router=self.router)
+        self.tools: ToolRegistry = tool_registry or ToolRegistry()
         # Role 1 depends on the AuditLogger interface only; the in-memory
         # implementation is a local default until Role 4 provides the backend.
         self.audit_logger: AuditLogger = audit_logger or InMemoryAuditLogger()
 
     # ------------------------------------------------------------------
+    # Initialisation helpers
+    # ------------------------------------------------------------------
+
+    def _init_state(self, fixture: Dict[str, Any]) -> AgentState:
+        state = AgentState()
+        task_request = fixture.get("task_request")
+        if isinstance(task_request, dict):
+            if not state.task_id and task_request.get("task_id"):
+                state.task_id = str(task_request["task_id"])
+            if not state.permit_id and task_request.get("permit_id"):
+                state.permit_id = str(task_request["permit_id"])
+            if not state.task_type and task_request.get("task_type"):
+                state.task_type = str(task_request["task_type"])
+            state._task_request = task_request
+        for key in (
+            "task_request",
+            "structured_ptw",
+            "structured_pid",
+            "graph_facts",
+            "rule_verdict",
+        ):
+            section = fixture.get(key)
+            if isinstance(section, dict) and not state.permit_id:
+                if section.get("permit_id"):
+                    state.permit_id = str(section["permit_id"])
+                    break
+        if not state.task_id:
+            state.task_id = state.permit_id
+        state.input_files = list(
+            fixture.get("document_refs")
+            or (task_request.get("document_refs") if isinstance(task_request, dict) else None)
+            or []
+        )
+        return state
+
+    # ------------------------------------------------------------------
     # Pipeline stages
     # ------------------------------------------------------------------
 
-    def _perceive(self, fixture: Dict[str, Any]) -> TaskRequest:
+    def _perceive(self, state: AgentState, fixture: Dict[str, Any]) -> AgentState:
         task_request = fixture.get("task_request")
         if not isinstance(task_request, dict):
-            raise OrchestratorError("fixture missing 'task_request' object")
-        return TaskRequest(**task_request)
+            raise StageFailure("perceive", "fixture missing 'task_request' object")
+        if not state.permit_id:
+            state.permit_id = str(task_request.get("permit_id", ""))
+        state._task_request = task_request
+        state.task_type = str(task_request.get("task_type", ""))
+        # Classify deterministically (no LLM). A classification failure is a
+        # perceive-stage failure.
+        try:
+            state.task_type = self.classifier.classify(fixture)
+        except TaskClassificationError as exc:
+            raise StageFailure("perceive", str(exc)) from exc
+        return state
 
-    def _understand(self, fixture: Dict[str, Any]) -> StructuredPTW:
+    def _understand(self, state: AgentState, fixture: Dict[str, Any]) -> AgentState:
         ptw = fixture.get("structured_ptw")
         if not isinstance(ptw, dict):
-            raise OrchestratorError("fixture missing 'structured_ptw' object")
-        return StructuredPTW(**ptw)
+            raise StageFailure("understand", "fixture missing 'structured_ptw' object")
+        state.structured_ptw = StructuredPTW(**ptw)
+        pid = fixture.get("structured_pid")
+        if isinstance(pid, dict):
+            from shared.contracts import StructuredPID
 
-    def _plan(self, task_request: TaskRequest, ptw: StructuredPTW) -> List[PlanStep]:
-        permit_id = ptw.get("permit_id") or task_request.get("permit_id")
-        return [
-            PlanStep(step="perceive", tool=None, model_category=None, status="done"),
-            PlanStep(step="understand", tool=None, model_category=None, status="done"),
-            PlanStep(step="plan", tool=None, model_category=None, status="done"),
-            PlanStep(
-                step="retrieve",
-                tool="search_knowledge",
-                model_category=None,
-                status="planned",
-            ),
-            PlanStep(
-                step="reason",
-                tool=None,
-                model_category=self.router.resolve("reasoning"),
-                status="planned",
-            ),
-            PlanStep(step="verify", tool=None, model_category=None, status="planned"),
-            PlanStep(step="verdict", tool=None, model_category=None, status="planned"),
-            PlanStep(step="log", tool="log_event", model_category=None, status="planned"),
-        ]
+            state.structured_pid = StructuredPID(**pid)
+        rule_verdict = fixture.get("rule_verdict")
+        if isinstance(rule_verdict, dict):
+            state.rule_verdict = RuleVerdict(**rule_verdict)
+        graph_facts = fixture.get("graph_facts")
+        if isinstance(graph_facts, dict):
+            state.graph_facts = GraphFacts(**graph_facts)
+        return state
 
-    def _retrieve(
-        self, fixture: Dict[str, Any], ptw: StructuredPTW
-    ) -> List[Dict[str, Any]]:
+    def _plan(self, state: AgentState, task_type: TaskType) -> AgentState:
+        state.plan = self.planner.plan(task_type, state.permit_id)
+        return state
+
+    def _retrieve(self, state: AgentState, fixture: Dict[str, Any]) -> AgentState:
+        ptw = state.structured_ptw
+        if ptw is None:
+            raise StageFailure("retrieve", "structured_ptw is required before retrieval")
         query = f"{ptw.get('work_type')} {ptw.get('scope')}"
-        knowledge = self.retriever.retrieve(
+        state.rag_context = self.retriever.retrieve(
             query,
             permit_id=ptw.get("permit_id"),
             context=fixture.get("knowledge"),
         )
-        return knowledge
+        return state
 
-    def _extract_rule_verdict(self, fixture: Dict[str, Any]) -> RuleVerdict:
-        verdict = fixture.get("rule_verdict")
-        if not isinstance(verdict, dict):
-            raise OrchestratorError("fixture missing 'rule_verdict' object")
-        # Rule verdict / graph facts are supplied by Role 3 (plant-safety)
-        # and are treated strictly as evidence to be reasoned from.
-        return RuleVerdict(**verdict)
+    def _use_tool(self, state: AgentState) -> AgentState:
+        """Execute the planned tool step against the closed tool registry.
 
-    def _extract_graph_facts(self, fixture: Dict[str, Any]) -> GraphFacts:
-        graph_facts = fixture.get("graph_facts")
-        if not isinstance(graph_facts, dict):
-            raise OrchestratorError("fixture missing 'graph_facts' object")
-        return GraphFacts(**graph_facts)
+        Unknown tools are rejected outright (they are not in the closed
+        registry).  Conceptual tools that are ``known`` but not yet
+        implemented in Milestone 1 are recorded as informational notes and
+        skipped — they never fabricate a result, and they never claim the
+        operation succeeded.  A real tool backend slots in later without
+        changing the workflow.
+        """
+        if state.plan is None:
+            raise StageFailure("use_tool", "no plan available for tool dispatch")
+        tool_name = None
+        for step in state.plan:
+            if step["step"] == "use_tool" and step.get("tool"):
+                tool_name = step["tool"]
+                break
+        if tool_name is None:
+            return state
+        if not self.tools.is_known(tool_name):
+            raise StageFailure(
+                "use_tool",
+                f"Unknown/unregistered tool {tool_name!r}; tool rejected.",
+            )
+        try:
+            self.tools.handle(tool_name, permit_id=state.permit_id)
+        except ToolRegistryError:
+            # Registered-but-not-implemented is a documented Milestone 1
+            # limitation.  Recorded as a non-fatal note (NOT an error): the
+            # tool did not execute, but no safety-critical stage depends on it
+            # yet.  Genuine failures stay in ``state.errors``.
+            state.tool_notes.append(
+                StageError(
+                    stage="use_tool",
+                    error_type="ToolUnavailable",
+                    message=f"Tool {tool_name!r} is registered but not "
+                    "implemented in Milestone 1; skipped as non-fatal.",
+                    timestamp=_utc_now(),
+                )
+            )
+        return state
 
-    def _reason(
-        self,
-        ptw: StructuredPTW,
-        graph_facts: GraphFacts,
-        rule_verdict: RuleVerdict,
-        retrieved: List[Dict[str, Any]],
-        selected_model: str,
-    ) -> LLMReasoningResult:
-        return self.reasoning.reason(
-            ptw=ptw,
-            graph_facts=graph_facts,
-            rule_verdict=rule_verdict,
-            retrieved=retrieved,
+    def _reason(self, state: AgentState) -> AgentState:
+        if state.structured_ptw is None or state.graph_facts is None or state.rule_verdict is None:
+            raise StageFailure(
+                "reason",
+                "cannot reason without ptw, graph_facts and rule_verdict",
+            )
+        state.llm_result = self.reasoning.reason(
+            ptw=state.structured_ptw,
+            graph_facts=state.graph_facts,
+            rule_verdict=state.rule_verdict,
+            retrieved=state.rag_context,
         )
+        return state
 
-    def _verify(
-        self, rule_verdict: RuleVerdict, llm_reasoning: LLMReasoningResult
-    ) -> VerificationResult:
-        return self.verifier.verify(rule_verdict, llm_reasoning)
+    def _verify(self, state: AgentState) -> AgentState:
+        if state.rule_verdict is None or state.llm_result is None:
+            raise StageFailure(
+                "verify", "rule_verdict and llm_result are required for verification"
+            )
+        state.verification = self.verifier.verify(state.rule_verdict, state.llm_result)
+        return state
 
-    def _final_verdict(self, verification: VerificationResult) -> Dict[str, Any]:
-        return {
+    def _final_verdict(self, state: AgentState) -> AgentState:
+        if state.verification is None:
+            raise StageFailure("act", "verification required to produce a final verdict")
+        verification = state.verification
+        state.final_verdict = {
             "permit_id": verification["permit_id"],
             "rule_result": verification["rule_result"],
             "llm_result": verification["llm_result"],
@@ -164,109 +274,195 @@ class AgentOrchestrator:
             "generated_at": _utc_now(),
             "audit_ref": _new_audit_ref(),
         }
+        return state
 
-    def _log(
-        self,
-        permit_id: str,
-        pipeline_stages: List[str],
-        stages: Dict[str, Any],
-    ) -> AuditEvent:
-        audit_ref = stages["final_verdict"].get("audit_ref") or _new_audit_ref()
+    def _act(self, state: AgentState) -> AgentState:
+        """Produce the final verdict (the actionable output of the workflow)."""
+        return self._final_verdict(state)
+
+    def _log(self, state: AgentState) -> AgentState:
+        audit_ref = (state.final_verdict or {}).get("audit_ref") or _new_audit_ref()
         event = AuditEvent(
             audit_ref=audit_ref,
-            permit_id=permit_id,
+            permit_id=state.permit_id,
             timestamp=_utc_now(),
-            pipeline=pipeline_stages,
-            stages=stages,
+            pipeline=self.PIPELINE_STAGES,
+            stages=self._stages_snapshot(state),
             sequence=[
                 {"step": s, "status": "done", "audit_ref": audit_ref}
-                for s in pipeline_stages
+                for s in self.PIPELINE_STAGES
             ],
         )
-        # Push through the shared AuditLogger interface (Role 4 implements it
-        # for real); the return value confirms the appended audit_ref.
         confirmed_ref = self.audit_logger.log(event)
         if confirmed_ref != audit_ref:
-            raise OrchestratorError(
+            raise StageFailure(
+                "log",
                 f"AuditLogger returned mismatched audit_ref: "
-                f"{confirmed_ref!r} != {audit_ref!r}"
+                f"{confirmed_ref!r} != {audit_ref!r}",
             )
-        return event
+        state.audit_refs.append(audit_ref)
+        state._audit_event = event
+        return state
+
+    def _stages_snapshot(self, state: AgentState) -> Dict[str, Any]:
+        """Build the audit ``stages`` dict from current AgentState."""
+        return {
+            "task_request": state._task_request,
+            "perceived": state._task_request,
+            "understood": state.structured_ptw,
+            "structured_pid": state.structured_pid,
+            "graph_facts": state.graph_facts,
+            "rule_verdict": state.rule_verdict,
+            "retrieved": state.rag_context,
+            "llm_reasoning": state.llm_result,
+            "verification": state.verification,
+            "final_verdict": state.final_verdict,
+            "task_type": state.task_type,
+            "execution_trace": state.execution_trace,
+        }
+
+    # ------------------------------------------------------------------
+    # Execution trace helpers
+    # ------------------------------------------------------------------
+
+    def _begin_stage(self, state: AgentState, stage: str) -> None:
+        state.current_stage = stage
+        state.execution_trace.append(
+            ExecutionTraceEntry(stage=stage, status="running", timestamp=_utc_now())
+        )
+
+    def _complete_stage(self, state: AgentState, stage: str) -> None:
+        for entry in state.execution_trace:
+            if entry["stage"] == stage:
+                entry["status"] = "completed"
+                entry["timestamp"] = _utc_now()
+        state.current_stage = None
+
+    def _fail_stage(self, state: AgentState, stage: str) -> None:
+        for entry in state.execution_trace:
+            if entry["stage"] == stage:
+                entry["status"] = "failed"
+                entry["timestamp"] = _utc_now()
+        state.current_stage = None
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
 
     def run(self, fixture: Dict[str, Any] | str | Path) -> OrchestratorResult:
-        """Run the full pipeline against a fixture dict or fixture file path."""
+        """Run the full controlled workflow against a fixture or fixture path.
+
+        Returns:
+            An ``OrchestratorResult``.  On a stage failure, the result still
+            carries a valid ``AgentState``-derived structure via ``audit`` and
+            the error is captured in ``state.errors``.  A failed workflow
+            never fabricates a PASS.
+
+        Raises:
+            OrchestratorError: if the fixture cannot be parsed at all.
+        """
         if isinstance(fixture, (str, Path)):
-            fixture = load_fixture(fixture)
-        permit_id = _fixture_permit_id(fixture)
+            try:
+                fixture = load_fixture(fixture)
+            except (OSError, json.JSONDecodeError) as exc:
+                raise OrchestratorError(f"Could not load fixture: {exc}") from exc
 
-        task_request = self._perceive(fixture)
-        ptw = self._understand(fixture)
-        plan = self._plan(task_request, ptw)
-        retrieved = self._retrieve(fixture, ptw)
-        rule_verdict = self._extract_rule_verdict(fixture)
-        graph_facts = self._extract_graph_facts(fixture)
-        selected_model = self.router.resolve("reasoning")
+        state = self._init_state(fixture)
 
-        llm_reasoning = self._reason(
-            ptw=ptw,
-            graph_facts=graph_facts,
-            rule_verdict=rule_verdict,
-            retrieved=retrieved,
-            selected_model=selected_model,
+        # Stage dispatch table: PERCEIVE -> UNDERSTAND -> PLAN -> RETRIEVE
+        # -> USE TOOL -> REASON -> VERIFY -> ACT -> LOG.
+        stages = [
+            ("perceive", self._perceive),
+            ("understand", self._understand),
+            ("plan", self._plan),
+            ("retrieve", self._retrieve),
+            ("use_tool", self._use_tool),
+            ("reason", self._reason),
+            ("verify", self._verify),
+            ("act", self._act),
+            ("log", self._log),
+        ]
+
+        for stage_name, stage_fn in stages:
+            self._begin_stage(state, stage_name)
+            try:
+                if stage_name == "plan":
+                    stage_fn(state, state.task_type)
+                elif stage_name in ("use_tool", "reason", "verify", "act", "log"):
+                    stage_fn(state)
+                else:
+                    stage_fn(state, fixture)
+                self._complete_stage(state, stage_name)
+            except StageFailure as exc:
+                self._fail_stage(state, exc.stage)
+                state.errors.append(
+                    StageError(
+                        stage=exc.stage,
+                        error_type="StageFailure",
+                        message=exc.message,
+                        timestamp=_utc_now(),
+                    )
+                )
+                break
+            except Exception as exc:  # noqa: BLE001 - record and stop safely
+                self._fail_stage(state, stage_name)
+                state.errors.append(
+                    StageError(
+                        stage=stage_name,
+                        error_type=type(exc).__name__,
+                        message=str(exc),
+                        timestamp=_utc_now(),
+                    )
+                )
+                break
+
+        # A failed workflow must never fabricate a PASS.
+        # If we failed before/at verification, leave final_verdict unset.
+
+        return self._compose_result(state)
+
+    def _compose_result(self, state: AgentState) -> OrchestratorResult:
+        """Build the public OrchestratorResult from the final AgentState.
+
+        On success, the result mirrors the previous Milestone 1 shape.  On
+        failure, the ``final_verdict``/``verification``/``llm_reasoning`` may
+        be ``None`` and the error detail is exposed via the audit ``stages``
+        and a top-level ``errors`` key.
+        """
+        result = OrchestratorResult(
+            permit_id=state.permit_id,
+            plan=state.plan or _empty_plan(),
+            llm_reasoning=state.llm_result,
+            verification=state.verification,
+            final_verdict=state.final_verdict,
+            audit=state._audit_event
+            or AuditEvent(
+                audit_ref=(state.audit_refs[-1] if state.audit_refs else _new_audit_ref()),
+                permit_id=state.permit_id,
+                timestamp=_utc_now(),
+                pipeline=self.PIPELINE_STAGES,
+                stages=self._stages_snapshot(state) if state.final_verdict else {},
+                sequence=[
+                    {"step": s, "status": "done", "audit_ref": ""}
+                    for s in self.PIPELINE_STAGES
+                ],
+            ),
         )
-        verification = self._verify(rule_verdict, llm_reasoning)
-        final_verdict = self._final_verdict(verification)
-
-        stages = {
-            "perceived": task_request,
-            "understood": ptw,
-            "graph_facts": graph_facts,
-            "rule_verdict": rule_verdict,
-            "retrieved": retrieved,
-            "llm_reasoning": llm_reasoning,
-            "verification": verification,
-            "final_verdict": final_verdict,
-        }
-        audit = self._log(
-            permit_id=permit_id,
-            pipeline_stages=[
-                "perceive",
-                "understand",
-                "plan",
-                "retrieve",
-                "reason",
-                "verify",
-                "final_verdict",
-                "log",
-            ],
-            stages=stages,
-        )
-
-        return OrchestratorResult(
-            permit_id=permit_id,
-            plan=plan,
-            llm_reasoning=llm_reasoning,
-            verification=verification,
-            final_verdict=final_verdict,
-            audit=audit,
-        )
+        # Surface error state on the result for callers/tests.
+        result["errors"] = [dict(e) for e in state.errors]
+        result["execution_trace"] = list(state.execution_trace)
+        result["failed_stage"] = state.failed_stage
+        return result
 
 
 # ---------------------------------------------------------------------------
-# Module-level helpers (kept free of both stdlib and external deps)
+# Module-level helpers
 # ---------------------------------------------------------------------------
 
 
-def _fixture_permit_id(fixture: Dict[str, Any]) -> str:
-    for key in ("task_request", "structured_ptw", "rule_verdict", "graph_facts"):
-        section = fixture.get(key)
-        if isinstance(section, dict) and section.get("permit_id"):
-            return str(section["permit_id"])
-    raise OrchestratorError("fixture does not identify a permit_id")
+def _empty_plan() -> List[PlanStep]:
+    return [PlanStep(step=s, tool=None, model_category=None, status="planned")
+            for s in AgentOrchestrator.PIPELINE_STAGES]
 
 
 def _new_audit_ref() -> str:
