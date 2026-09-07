@@ -50,9 +50,9 @@
     },
     {
       "scenario_id": "scenario-ambiguous-01",
-      "description": "Inspection involving V-101 and G-101 has insufficient certainty about the exact isolation dependency and must be escalated for human review.",
+      "description": "Inspection around G-101 and V-101 has insufficient certainty about the exact isolation dependency and must be escalated for human review.",
       "permit_ids": [
-        "PTW-2026-003"
+        "PTW-2026-005"
       ],
       "expected_rule_result": "FLAGGED",
       "expected_final_decision": "REVIEW_REQUIRED",
