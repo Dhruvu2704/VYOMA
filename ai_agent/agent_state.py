@@ -79,6 +79,7 @@ class AgentState:
 
     # -- Computed results ---------------------------------------------------
     llm_result: Optional[LLMReasoningResult] = None
+    reasoning_provider: Optional[str] = None
     verification: Optional[VerificationResult] = None
     final_verdict: Optional[FinalVerdict] = None
 

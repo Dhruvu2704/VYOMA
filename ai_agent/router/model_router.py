@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+from ai_agent.config import OllamaConfig, load_ollama_config
 from ai_agent.router.model_provider import (
     Capability,
     ModelProvider,
@@ -125,3 +126,34 @@ class ModelRouter:
 def build_router() -> ModelRouter:
     """Factory: returns the Day 1/2 default router with a mock provider."""
     return ModelRouter()
+
+
+def build_local_model_router(
+    config: Optional[OllamaConfig] = None,
+    *,
+    transport: Optional[object] = None,
+) -> ModelRouter:
+    """Factory: returns a router that prefers the real local Ollama provider.
+
+    The local provider is registered first so it wins capability selection for
+    ``reasoning``. There is NO cloud fallback: if Ollama is unreachable, the
+    provider raises a ``ProviderError`` and no successful verdict is produced.
+
+    ``transport`` is passed through to the Ollama provider and is primarily
+    for tests (a stub); when omitted the provider uses a local-only HTTP
+    client against the configured base URL.
+
+    Args:
+        config: ``OllamaConfig``; loaded from environment/defaults if ``None``.
+        transport: optional HTTP transport stub (testing only).
+
+    Returns:
+        A ``ModelRouter`` whose ``reasoning`` capability is served by the
+        local Ollama provider.
+    """
+    from ai_agent.router.ollama_provider import OllamaModelProvider
+
+    provider = OllamaModelProvider(
+        config=config or load_ollama_config(), transport=transport
+    )
+    return ModelRouter(default_model=provider.name, providers=[provider])

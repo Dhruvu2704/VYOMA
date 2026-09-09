@@ -40,6 +40,7 @@ from ai_agent.agent_state import (
     StageError,
 )
 from ai_agent.audit import InMemoryAuditLogger
+from ai_agent.config import OllamaConfig
 from ai_agent.planner import TaskAwarePlanner
 from ai_agent.rag.retriever import Retriever, build_retriever
 from ai_agent.reasoning.reasoning_engine import (
@@ -256,6 +257,9 @@ class AgentOrchestrator:
             active_permits=state.active_permits,
             task=state._task_request,
         )
+        # Record which provider/model served the reasoning stage so the audit
+        # trace captures the model/provider activity.
+        state.reasoning_provider = _reasoning_provider_name(self.reasoning)
         return state
 
     def _verify(self, state: AgentState) -> AgentState:
@@ -322,6 +326,7 @@ class AgentOrchestrator:
             "rule_verdict": state.rule_verdict,
             "retrieved": state.rag_context,
             "llm_reasoning": state.llm_result,
+            "reasoning_provider": state.reasoning_provider,
             "verification": state.verification,
             "final_verdict": state.final_verdict,
             "task_type": state.task_type,
@@ -470,6 +475,47 @@ class AgentOrchestrator:
 def _empty_plan() -> List[PlanStep]:
     return [PlanStep(step=s, tool=None, model_category=None, status="planned")
             for s in AgentOrchestrator.PIPELINE_STAGES]
+
+
+def _reasoning_provider_name(engine: object) -> str:
+    """Best-effort identifier of the reasoning backend for the audit trace."""
+    provider = getattr(engine, "provider", None)
+    name = getattr(provider, "name", None)
+    if name:
+        return str(name)
+    engine_name = getattr(engine, "name", None)
+    if engine_name:
+        return str(engine_name)
+    return type(engine).__name__
+
+
+def build_provider_orchestrator(
+    config: Optional[OllamaConfig] = None,
+    *,
+    transport: Optional[object] = None,
+) -> AgentOrchestrator:
+    """Factory: an orchestrator whose REASON stage uses the real local model.
+
+    Wires ``ProviderReasoningEngine`` backed by an Ollama-serving router so the
+    full pipeline (Task -> ... -> REASON -> ... -> FinalVerdict) runs through a
+    local open-weight LLM. There is NO cloud fallback: if the local endpoint is
+    unreachable the reason stage fails explicitly and no verdict is produced.
+
+    The default deterministic path (``AgentOrchestrator()``) is unchanged.
+
+    Args:
+        config: ``OllamaConfig``; loaded from environment/defaults if ``None``.
+        transport: optional HTTP transport stub (testing only).
+
+    Returns:
+        An ``AgentOrchestrator`` using the provider-backed reasoning engine.
+    """
+    from ai_agent.router.model_router import build_local_model_router
+    from ai_agent.reasoning.provider_reasoning_engine import ProviderReasoningEngine
+
+    router = build_local_model_router(config=config, transport=transport)
+    engine = ProviderReasoningEngine(router=router)
+    return AgentOrchestrator(reasoning_engine=engine, router=router)
 
 
 def _new_audit_ref() -> str:
