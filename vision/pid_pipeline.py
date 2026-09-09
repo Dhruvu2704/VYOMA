@@ -15,6 +15,43 @@ from vision.pid_vision import (
 )
 from vision.pid_extractor import extract_pid_from_mock
 
+def synchronize_symbol_connections(
+    symbols: list[dict],
+    connections: list[dict],
+) -> list[dict]:
+    """Synchronize symbol connections from normalized top-level connections."""
+
+    neighbors: dict[str, set[str]] = {
+        symbol["symbol_id"]: set()
+        for symbol in symbols
+        if symbol.get("symbol_id")
+    }
+
+    for connection in connections:
+        source = connection.get("source")
+        target = connection.get("target")
+
+        if source in neighbors and target in neighbors:
+            neighbors[source].add(target)
+            neighbors[target].add(source)
+
+    synchronized = []
+
+    for symbol in symbols:
+        updated_symbol = dict(symbol)
+        symbol_id = updated_symbol.get("symbol_id")
+
+        if symbol_id in neighbors:
+            updated_symbol["connections"] = sorted(
+                neighbors[symbol_id]
+            )
+        else:
+            updated_symbol["connections"] = []
+
+        synchronized.append(updated_symbol)
+
+    return synchronized
+
 
 def process_pid_data(
     source: str,
@@ -43,6 +80,11 @@ def process_pid_data(
 
     normalized_connections = normalize_pid_connections(
         validated["connections"]
+    )
+
+    normalized_symbols = synchronize_symbol_connections(
+        normalized_symbols,
+        normalized_connections,
     )
 
     equipment_tags = [

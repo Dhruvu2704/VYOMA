@@ -1,18 +1,3 @@
-"""P&ID vision processing foundation for Role 2 OCR + Vision.
-
-This module provides a mock-first vision layer for validating and
-normalizing P&ID symbol, tag, and connection data before it is passed
-to the existing PID extractor.
-
-It does not create a new shared contract.
-The final cross-role output remains StructuredPID.
-"""
-
-from __future__ import annotations
-
-from typing import Any, Dict, List
-
-
 def validate_pid_vision_input(
     source: str,
     symbols: List[Dict[str, Any]],
@@ -45,7 +30,7 @@ def validate_pid_vision_input(
 def normalize_pid_symbols(
     symbols: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Normalize symbol fields without inventing document facts."""
+    """Normalize P&ID symbol fields without inventing document facts."""
 
     normalized = []
 
@@ -67,10 +52,24 @@ def normalize_pid_symbols(
                 normalized_symbol["symbol_type"]
             ).strip().upper()
 
+        connections = normalized_symbol.get(
+            "connections",
+            [],
+        )
+
+        if not isinstance(connections, list):
+            raise ValueError(
+                "Symbol connections must be a list."
+            )
+
+        normalized_symbol["connections"] = [
+            str(connection).strip()
+            for connection in connections
+        ]
+
         normalized.append(normalized_symbol)
 
     return normalized
-
 
 def normalize_pid_connections(
     connections: List[Dict[str, Any]],

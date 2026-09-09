@@ -111,6 +111,34 @@ class TestPIDPipeline(unittest.TestCase):
             "CW-101",
         )
 
+    def test_pipeline_symbol_connections_match_top_level_connections(self):
+        result = process_pid_data(
+            self.source,
+            self.pid_id,
+            self.symbols,
+            self.connections,
+        )
+
+        symbol_connections = {
+            symbol["symbol_id"]: set(symbol["connections"])
+            for symbol in result["symbols"]
+        }
+
+        self.assertEqual(
+            symbol_connections["P-101"],
+            {"CW-101"},
+        )
+
+        self.assertEqual(
+            symbol_connections["CW-101"],
+            {"P-101", "G-101"},
+        )
+
+        self.assertEqual(
+            symbol_connections["G-101"],
+            {"CW-101"},
+        )
+
     def test_empty_source_raises_error(self):
         with self.assertRaises(ValueError):
             process_pid_data(
