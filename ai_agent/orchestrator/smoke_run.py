@@ -7,6 +7,11 @@ local pipeline:
     -> LOCAL OLLAMA MODEL -> ProviderReasoningEngine -> Verification
     -> FinalVerdict -> ExecutionTrace / AuditEvent
 
+    The deterministic ROLE 3 plant-safety pipeline is enabled at USE TOOL:
+    the authoritative GraphFacts + RuleVerdict are derived from the structured
+    PTW + P&ID evidence, then handed to the local model for independent
+    reasoning. The model cannot override the deterministic verdict.
+
 It uses the fixture/mock structured evidence already present in the repository
 (``ai_agent/fixtures/safe_case.json``) and does NOT invent new safety rules or
 claim actual plant safety conclusions.
@@ -75,7 +80,7 @@ def run_smoke() -> Dict[str, Any]:
 
     from ai_agent.orchestrator.orchestrator import build_provider_orchestrator
 
-    orchestrator = build_provider_orchestrator(config=cfg)
+    orchestrator = build_provider_orchestrator(config=cfg, plant_safety=True)
 
     print("-" * 64)
     print("Pipeline stages:")
@@ -96,6 +101,14 @@ def run_smoke() -> Dict[str, Any]:
     _print_stage(
         "REASONING COMPLETED",
         (result.get("llm_reasoning") or {}).get("llm_result"),
+    )
+    _print_stage(
+        "DETERMINISTIC SAFETY EVALUATED",
+        str(
+            (result.get("audit") or {})
+            .get("stages", {})
+            .get("deterministic_safety_evaluated", False)
+        ),
     )
     _print_stage(
         "VERIFICATION COMPLETED",

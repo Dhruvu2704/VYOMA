@@ -22,7 +22,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from shared.contracts import (
     AuditEvent,
@@ -94,6 +94,12 @@ class AgentOrchestrator:
         classifier: Optional[TaskClassifier] = None,
         planner: Optional[TaskAwarePlanner] = None,
         tool_registry: Optional[ToolRegistry] = None,
+        plant_safety_evaluator: Optional[
+            Callable[
+                [Dict[str, Any], Dict[str, Any], Optional[Dict[str, Any]]],
+                Tuple[Dict[str, Any], Dict[str, Any]],
+            ]
+        ] = None,
     ) -> None:
         self.reasoning = reasoning_engine or DeterministicReasoningEngine()
         self.retriever = retriever or build_retriever()
@@ -102,6 +108,12 @@ class AgentOrchestrator:
         self.classifier = classifier or TaskClassifier()
         self.planner = planner or TaskAwarePlanner(router=self.router)
         self.tools: ToolRegistry = tool_registry or ToolRegistry()
+        # Role 3 integration is opt-in: when a plant-safety evaluator is wired
+        # in, the USE TOOL stage derives the authoritative GraphFacts and
+        # RuleVerdict from the structured PTW + P&ID evidence. Without it the
+        # orchestrator behaves exactly as in Day 1-4 (evidence is fixture/mock
+        # supplied).
+        self.plant_safety_evaluator = plant_safety_evaluator
         # Role 1 depends on the AuditLogger interface only; the in-memory
         # implementation is a local default until Role 4 provides the backend.
         self.audit_logger: AuditLogger = audit_logger or InMemoryAuditLogger()
@@ -215,6 +227,12 @@ class AgentOrchestrator:
                 break
         if tool_name is None:
             return state
+        # Role 3 integration: when a deterministic plant-safety evaluator is
+        # configured, the planned conflict check derives the authoritative
+        # GraphFacts + RuleVerdict from the structured PTW + P&ID evidence.
+        # This is the only stage that runs the deterministic Role 3 pipeline.
+        if self.plant_safety_evaluator is not None and tool_name == "check_conflict":
+            return self._run_plant_safety(state)
         if not self.tools.is_known(tool_name):
             raise StageFailure(
                 "use_tool",
@@ -236,6 +254,46 @@ class AgentOrchestrator:
                     timestamp=_utc_now(),
                 )
             )
+        return state
+
+    def _run_plant_safety(self, state: AgentState) -> AgentState:
+        """Execute the deterministic Role 3 plant-safety pipeline.
+
+        Runs the configured ``plant_safety_evaluator`` against the structured
+        PTW + P&ID evidence and records the authoritative ``GraphFacts`` and
+        ``RuleVerdict`` on ``AgentState`` for the REASON stage.
+
+        The deterministic rules are the safety authority: the reasoning
+        provider consumes this verdict and can never override it. Any failure
+        here fails the stage and prevents any final verdict (no fake PASS).
+        """
+        ptw = state.structured_ptw
+        pid = state.structured_pid
+        if ptw is None or pid is None:
+            raise StageFailure(
+                "use_tool",
+                "check_conflict requires structured_ptw and structured_pid",
+            )
+        # Pre-computed overlap evidence (e.g. Role 4 active-permit layer) is
+        # carried on the supplied graph_facts envelope; pass it through so the
+        # deterministic rules can detect conflicts. Absent evidence is safe.
+        overlap_check: Optional[Dict[str, Any]] = None
+        if isinstance(state.graph_facts, dict):
+            supplied_overlap = state.graph_facts.get("overlap_check")
+            if isinstance(supplied_overlap, dict):
+                overlap_check = supplied_overlap
+        try:
+            graph_facts, rule_verdict = self.plant_safety_evaluator(  # type: ignore[misc]
+                ptw, pid, overlap_check=overlap_check
+            )
+        except Exception as exc:  # noqa: BLE001 - surface deterministically
+            raise StageFailure(
+                "use_tool",
+                f"Plant-safety evaluation failed: {type(exc).__name__}: {exc}",
+            ) from exc
+        state.graph_facts = graph_facts
+        state.rule_verdict = rule_verdict
+        state.deterministic_safety_evaluated = True
         return state
 
     def _reason(self, state: AgentState) -> AgentState:
@@ -329,6 +387,10 @@ class AgentOrchestrator:
             "reasoning_provider": state.reasoning_provider,
             "verification": state.verification,
             "final_verdict": state.final_verdict,
+            "deterministic_safety_evaluated": state.deterministic_safety_evaluated,
+            "requested_human_review": bool(
+                (state.verification or {}).get("requires_human_review")
+            ),
             "task_type": state.task_type,
             "execution_trace": state.execution_trace,
         }
@@ -453,7 +515,7 @@ class AgentOrchestrator:
                 permit_id=state.permit_id,
                 timestamp=_utc_now(),
                 pipeline=self.PIPELINE_STAGES,
-                stages=self._stages_snapshot(state) if state.final_verdict else {},
+                stages=self._stages_snapshot(state),
                 sequence=[
                     {"step": s, "status": "done", "audit_ref": ""}
                     for s in self.PIPELINE_STAGES
@@ -493,6 +555,7 @@ def build_provider_orchestrator(
     config: Optional[OllamaConfig] = None,
     *,
     transport: Optional[object] = None,
+    plant_safety: bool = False,
 ) -> AgentOrchestrator:
     """Factory: an orchestrator whose REASON stage uses the real local model.
 
@@ -503,9 +566,14 @@ def build_provider_orchestrator(
 
     The default deterministic path (``AgentOrchestrator()``) is unchanged.
 
+    When ``plant_safety`` is True the deterministic Role 3 pipeline is enabled
+    at USE TOOL: the orchestrator derives the authoritative GraphFacts +
+    RuleVerdict from the structured PTW + P&ID evidence before reasoning.
+
     Args:
         config: ``OllamaConfig``; loaded from environment/defaults if ``None``.
         transport: optional HTTP transport stub (testing only).
+        plant_safety: enable the deterministic Role 3 pipeline at USE TOOL.
 
     Returns:
         An ``AgentOrchestrator`` using the provider-backed reasoning engine.
@@ -515,7 +583,16 @@ def build_provider_orchestrator(
 
     router = build_local_model_router(config=config, transport=transport)
     engine = ProviderReasoningEngine(router=router)
-    return AgentOrchestrator(reasoning_engine=engine, router=router)
+    evaluator = None
+    if plant_safety:
+        from ai_agent.plant_safety_integration import evaluate_plant_safety
+
+        evaluator = evaluate_plant_safety
+    return AgentOrchestrator(
+        reasoning_engine=engine,
+        router=router,
+        plant_safety_evaluator=evaluator,
+    )
 
 
 def _new_audit_ref() -> str:

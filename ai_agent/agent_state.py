@@ -71,6 +71,9 @@ class AgentState:
     active_permits: Optional[ActivePermits] = None
     rule_verdict: Optional[RuleVerdict] = None
 
+    # -- Deterministic evidence (populated by use_tool / Role 3) -------------
+    deterministic_safety_evaluated: bool = field(default=False)
+
     # -- Retrieved knowledge (populated by retrieve) -------------------------
     rag_context: List[Dict[str, Any]] = field(default_factory=list)
 
