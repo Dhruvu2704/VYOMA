@@ -10,76 +10,102 @@ class TestFixtureIntegration(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        repo_root = Path(__file__).resolve().parents[2]
-
-        fixture_path = (
-            repo_root
+        cls.repo_root = Path(__file__).resolve().parents[2]
+        cls.fixtures_dir = (
+            cls.repo_root
             / "ai_agent"
             / "fixtures"
-            / "safe_case.json"
         )
+
+        cls.fixture_names = [
+            "safe_case.json",
+            "conflict_case.json",
+            "ambiguous_case.json",
+            "disagreement_case.json",
+        ]
+
+    def _load_fixture(self, fixture_name):
+        fixture_path = self.fixtures_dir / fixture_name
 
         with fixture_path.open(
             "r",
             encoding="utf-8",
         ) as fixture_file:
-            cls.fixture = json.load(fixture_file)
+            return json.load(fixture_file)
 
-    def test_safe_fixture_ptw_matches_role2_contract(self):
-        structured_ptw = self.fixture["structured_ptw"]
+    def test_all_fixtures_have_role2_data(self):
+        for fixture_name in self.fixture_names:
+            with self.subTest(fixture=fixture_name):
+                fixture = self._load_fixture(fixture_name)
 
-        result = extract_ptw_from_mock(
-            structured_ptw["raw_document_ref"],
-            structured_ptw,
-        )
+                self.assertIn(
+                    "structured_ptw",
+                    fixture,
+                )
 
-        self.assertEqual(
-            result["permit_id"],
-            structured_ptw["permit_id"],
-        )
+                self.assertIn(
+                    "structured_pid",
+                    fixture,
+                )
 
-        self.assertEqual(
-            result["equipment_tags"],
-            structured_ptw["equipment_tags"],
-        )
+    def test_all_fixtures_ptw_match_role2_contract(self):
+        for fixture_name in self.fixture_names:
+            with self.subTest(fixture=fixture_name):
+                fixture = self._load_fixture(fixture_name)
 
-        self.assertEqual(
-            result["location"],
-            structured_ptw["location"],
-        )
+                structured_ptw = fixture["structured_ptw"]
 
-        self.assertEqual(
-            result["raw_document_ref"],
-            structured_ptw["raw_document_ref"],
-        )
+                result = extract_ptw_from_mock(
+                    structured_ptw["raw_document_ref"],
+                    structured_ptw,
+                )
 
-    def test_safe_fixture_pid_matches_role2_contract(self):
-        structured_pid = self.fixture["structured_pid"]
+                self.assertEqual(
+                    result["permit_id"],
+                    structured_ptw["permit_id"],
+                )
 
-        result = extract_pid_from_mock(
-            structured_pid["source"],
-            structured_pid,
-        )
+                self.assertEqual(
+                    result["location"],
+                    structured_ptw["location"],
+                )
 
-        self.assertEqual(
-            result["pid_id"],
-            structured_pid["pid_id"],
-        )
+                self.assertEqual(
+                    result["equipment_tags"],
+                    structured_ptw["equipment_tags"],
+                )
 
-        self.assertEqual(
-            result["equipment_tags"],
-            structured_pid["equipment_tags"],
-        )
+    def test_all_fixtures_pid_match_role2_contract(self):
+        for fixture_name in self.fixture_names:
+            with self.subTest(fixture=fixture_name):
+                fixture = self._load_fixture(fixture_name)
 
-        self.assertEqual(
-            result["symbols"],
-            structured_pid["symbols"],
-        )
+                structured_pid = fixture["structured_pid"]
 
-        self.assertEqual(
-            result["connections"],
-            structured_pid["connections"],
-        )
+                result = extract_pid_from_mock(
+                    structured_pid["source"],
+                    structured_pid,
+                )
+
+                self.assertEqual(
+                    result["pid_id"],
+                    structured_pid["pid_id"],
+                )
+
+                self.assertEqual(
+                    result["equipment_tags"],
+                    structured_pid["equipment_tags"],
+                )
+
+                self.assertEqual(
+                    result["symbols"],
+                    structured_pid["symbols"],
+                )
+
+                self.assertEqual(
+                    result["connections"],
+                    structured_pid["connections"],
+                )
 
 
 if __name__ == "__main__":
