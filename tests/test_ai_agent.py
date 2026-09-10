@@ -237,6 +237,20 @@ class InvariantTests(unittest.TestCase):
             self.assertTrue(registry.is_known(name), name)
         self.assertFalse(registry.is_known("arbitrary_shell"))
 
+    def test_registered_tool_dispatch(self) -> None:
+        registry = ToolRegistry()
+        dummy_called = []
+
+        def dummy_handler(verdict, output_dir="outputs"):
+            dummy_called.append(verdict["permit_id"])
+            return {"type": "WORD_MEMO", "path": "test.docx"}
+
+        registry.register("generate_word", dummy_handler)
+        res = registry.handle("generate_word", {"permit_id": "PTW-100"})
+        self.assertEqual(dummy_called, ["PTW-100"])
+        self.assertEqual(res["type"], "WORD_MEMO")
+
+
     def test_disagreement_always_requires_human_review(self) -> None:
         engine = VerificationEngine()
         for rule, llm in (("PASS", "FLAGGED"), ("FLAGGED", "PASS")):

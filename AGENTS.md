@@ -1,27 +1,46 @@
 # AGENTS.md
 
-## Status: empty scaffold
+## Status: Active Implementation (Milestone 1 Core Pipeline & Data Deliverable Generators)
 
-This repository has **no commits yet** and **no working code**. Every tracked
-source file is currently empty (0 bytes). There is no README, no manifest
-(`pyproject.toml`, `package.json`, etc.), no lockfile, no build/test/lint config,
-and no CI.
+This repository contains the working implementation for the VYOMA AI Agent safety reasoning pipeline and dataset/deliverable generator test suites.
 
-Do not assume any package, dependency, or command exists. Verify before relying
-on anything; it almost certainly does not exist yet.
+## Repository Layout
 
-## Intended layout (from directory structure only)
+- `ai_agent/` — Core agent package
+  - `orchestrator/orchestrator.py` — Top-level agent orchestration (`PERCEIVE` -> `UNDERSTAND` -> `PLAN` -> `RETRIEVE` -> `REASON` -> `VERIFY` -> `FINAL VERDICT` -> `LOG`)
+  - `router/model_router.py` — Model routing for agent stages
+  - `reasoning/reasoning_engine.py` — Deterministic reasoning engine
+  - `rag/retriever.py` — Knowledge retriever
+  - `tool_registry.py` — Controlled registry for tool permissions and execution
+  - `verification.py` — Verification engine comparing deterministic rule verdicts against LLM reasoning
+  - `audit.py` — In-memory audit event logger implementing shared `AuditLogger` contract
+  - `fixtures/` — Fixture scenarios: `safe_case.json`, `conflict_case.json`, `ambiguous_case.json`, `disagreement_case.json`
+- `shared/contracts.py` — Authoritative type contracts (`StructuredPTW`, `StructuredPID`, `RuleVerdict`, `LLMReasoningResult`, `VerificationResult`, `FinalVerdict`, `AuditEvent`, `AuditLogger`)
+- `data-testing/` — Deliverable generators & dataset testing
+  - `generators/`
+    - `word_gen.py` — Safety review Word memo generator (`generate_word`)
+    - `excel_gen.py` — Permit conflict matrix Excel generator (`generate_excel`)
+    - `pdf_annotator.py` — PyMuPDF-based P&ID visual annotator (`annotate_pdf`)
+  - `tests/`
+    - `test_dataset_consistency.py` — Integration & consistency validation across sample dataset (PTWs, equipment, pipes, P&ID PDF, permit register, ground truth)
+    - `test_word_gen.py` — Unit tests for Word generator
+    - `test_excel_gen.py` — Unit tests for Excel generator
+    - `test_pdf_annotator.py` — Unit tests for P&ID PDF annotator
+- `sample-data/` — Plant dataset files (`ptws.json`, `equipment.json`, `pipes.json`, `permit-register.json`, `ground-truth.json`, `pid-unit-01.pdf`, `sops.json`)
+- `tests/` — Core AI Agent test suites
+  - `test_ai_agent.py` — Pipeline step, scenario, and safety invariant tests
+  - `test_contracts.py` — Shared data contract compatibility & schema tests
 
-- `ai_agent/` — the agent package
-  - `orchestrator/` — top-level agent orchestration
-  - `router/model_router.py` — model routing
-  - `reasoning/reasoning_engine.py`
-  - `rag/retriever.py` — retrieval
-  - `tool_registry.py`
-  - `verification.py`
-  - `fixtures/*.json` — the four fixture cases (`safe`, `conflict`,
-    `ambiguous`, `diagreement`) are all empty placeholders
-- `shared/contracts.py` — shared data contracts/types
+## Running Tests
 
-These names suggest the shape of the system, but none of it is implemented.
-Work is greenfield: define contracts and behavior before building on assumptions.
+Run all tests via pytest:
+
+```bash
+python -m pytest
+```
+
+Or run via standard Python unittest:
+
+```bash
+python -m unittest discover -s tests -v
+```

@@ -1,0 +1,13 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Output deliverables generated during testing/runs
+outputs/
+
+# Environment
+.venv/
+env/
+venv/
