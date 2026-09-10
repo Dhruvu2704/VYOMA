@@ -1,6 +1,12 @@
 from pathlib import Path
+import sys
 
-from data_testing.generators.word_gen import generate_word
+sys.path.insert(
+    0,
+    str(Path(__file__).resolve().parents[1] / "generators")
+)
+
+from word_gen import generate_word
 
 
 def test_generate_word(tmp_path):
