@@ -18,6 +18,7 @@ from fastapi import APIRouter
 
 from ai_agent.config import OllamaConfig, load_ollama_config
 from ai_agent.orchestrator.orchestrator import AgentOrchestrator
+from ai_agent.router.model_router import ModelRouter, build_local_model_router
 from ai_agent.router.ollama_provider import list_local_models
 from ai_agent.tool_registry import CONCEPTUAL_TOOL_NAMES
 
@@ -53,6 +54,27 @@ def workbench_status() -> Dict[str, Any]:
     config: OllamaConfig = load_ollama_config()
     ollama = list_local_models(config)
 
+    # Same factory the request path executes (fixture_run -> build_provider_orchestrator
+    # -> build_local_model_router): reflects the real registered provider mapping.
+    model_router: ModelRouter = build_local_model_router(config=config)
+    routing = []
+    for entry in model_router.list_capabilities():
+        capability = entry["capability"]
+        provider = entry["provider"]
+        if provider is not None:
+            logic = (
+                f"select_provider('{capability}') returns the first registered provider "
+                f"(registration order) whose capabilities include '{capability}': "
+                f"{provider}."
+            )
+        else:
+            logic = (
+                f"No registered provider advertises '{capability}'; "
+                f"select_provider('{capability}') raises ModelRouterError, so routing "
+                f"to this capability is unavailable."
+            )
+        routing.append({"capability": capability, "provider": provider, "logic": logic})
+
     return {
         "application": {"name": "VYOMA", "components": ["KAVACH"]},
         "orchestrator": {
@@ -60,6 +82,11 @@ def workbench_status() -> Dict[str, Any]:
             "reasoning_provider": f"ollama:{config.model}",
             "provider_base_url": config.base_url,
             "provider_timeout_s": config.timeout,
+        },
+        "router": {
+            "categories": list(model_router.capabilities()),
+            "registered_providers": list(model_router.registered_providers()),
+            "routing": routing,
         },
         "ollama": {
             "status": ollama["status"],

@@ -263,6 +263,11 @@ export interface WorkbenchStatus {
     models: string[]
     detail: string | null
   }
+  router: {
+    categories: string[]
+    registered_providers: string[]
+    routing: { capability: string; provider: string | null; logic: string }[]
+  }
   tools: {
     registered: string[]
     deliverable_generators: { name: string; file_type: string; purpose: string }[]

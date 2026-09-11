@@ -21,6 +21,7 @@ import {
   Table,
   FileType,
   ShieldCheck,
+  Network,
 } from 'lucide-react'
 
 const generatorIcons: Record<string, typeof FileText> = {
@@ -177,6 +178,35 @@ export default function WorkbenchPage() {
               </div>
             </Panel>
           </div>
+
+          <Panel corners className="mt-6">
+            <PanelHeader
+              title="Model Router"
+              icon={Network}
+              action={
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {status.router.registered_providers.join(', ') || 'no providers'}
+                </span>
+              }
+            />
+            <div className="divide-y divide-border">
+              {status.router.routing.map((entry) => (
+                <div key={entry.capability} className="flex items-start gap-4 px-4 py-3">
+                  <span className="w-44 shrink-0 pt-0.5 font-mono text-sm font-semibold text-foreground">
+                    {entry.capability}
+                  </span>
+                  {entry.provider ? (
+                    <StatusBadge value={entry.provider} size="sm" />
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded border border-dashed border-border bg-background/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      not configured
+                    </span>
+                  )}
+                  <p className="min-w-0 flex-1 text-xs text-muted-foreground">{entry.logic}</p>
+                </div>
+              ))}
+            </div>
+          </Panel>
 
           <Panel corners className="mt-6">
             <PanelHeader

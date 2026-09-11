@@ -122,6 +122,29 @@ class ModelRouter:
     def registered_providers(self) -> tuple[str, ...]:
         return tuple(sorted(self._providers))
 
+    def list_capabilities(self) -> List[Dict[str, Optional[str]]]:
+        """Read-only mapping of every valid routing category to its provider.
+
+        Uses the same ``select_provider`` logic the pipeline executes: the
+        serving provider for a category is the first registered provider (in
+        registration order) whose ``capabilities`` include the category. A
+        category with no serving provider reports ``provider=None`` (routing
+        to it raises ``ModelRouterError`` at call time) — never an invented
+        model name.
+
+        Returns:
+            One dict per category, ordered by sorted category name:
+            ``{"capability": str, "provider": provider name or None}``.
+        """
+        mapping: List[Dict[str, Optional[str]]] = []
+        for capability in self.capabilities():
+            try:
+                serving = self.select_provider(capability).name
+            except ModelRouterError:
+                serving = None
+            mapping.append({"capability": capability, "provider": serving})
+        return mapping
+
 
 def build_router() -> ModelRouter:
     """Factory: returns the Day 1/2 default router with a mock provider."""

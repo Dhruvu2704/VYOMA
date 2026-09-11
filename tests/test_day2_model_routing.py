@@ -120,6 +120,31 @@ class ModelRouterTests(unittest.TestCase):
         self.assertIn("a", router.registered_providers())
         self.assertIn("b", router.registered_providers())
 
+    def test_list_capabilities_reports_real_mappings(self) -> None:
+        router = ModelRouter()
+        mapping = {
+            entry["capability"]: entry["provider"]
+            for entry in router.list_capabilities()
+        }
+        self.assertEqual(set(mapping), set(router.capabilities()))
+
+        # Default router is the mock: no "OCR" capability is served.
+        self.assertEqual(mapping["reasoning"], "mock-local-model")
+        self.assertEqual(mapping["vision"], "mock-local-model")
+        self.assertIsNone(mapping["OCR"])
+
+        # A non-None provider must be a real registered provider.
+        for provider in mapping.values():
+            if provider is not None:
+                self.assertIn(provider, router.registered_providers())
+
+        # An unserved category is reported as such and really does not route.
+        for capability, provider in mapping.items():
+            if provider is None:
+                self.assertFalse(router.has_provider_for(capability))
+                with self.assertRaises(ModelRouterError):
+                    router.select_provider(capability)
+
 
 class ProviderReasoningEngineTests(unittest.TestCase):
     """Reasoning via the router/provider must produce the expected contracts."""

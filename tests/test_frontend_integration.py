@@ -42,8 +42,10 @@ from backend.main import create_app  # noqa: E402
 from backend.services.kavach import KavachConnector  # noqa: E402
 from backend.services.password import hash_password  # noqa: E402
 
+from ai_agent.config import load_ollama_config  # noqa: E402
 from ai_agent.orchestrator.orchestrator import AgentOrchestrator  # noqa: E402
 from ai_agent.plant_safety_integration import evaluate_plant_safety  # noqa: E402
+from ai_agent.router.model_router import build_local_model_router  # noqa: E402
 
 FRONTEND = _REPO / "frontend"
 FIXTURES = _REPO / "ai_agent" / "fixtures"
@@ -380,6 +382,64 @@ class WorkbenchStatusTest(unittest.TestCase):
         self.assertEqual(body["ollama"]["status"], "unreachable")
         self.assertEqual(body["ollama"]["models"], [])
         self.assertEqual(body["ollama"]["model_count"], 0)
+
+    def test_workbench_router_section_matches_model_router(self):
+        resp = self.client.get("/api/workbench/status")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+
+        config = load_ollama_config()
+        reference = build_local_model_router(config=config)
+        expected = {
+            entry["capability"]: entry["provider"]
+            for entry in reference.list_capabilities()
+        }
+
+        self.assertEqual(body["router"]["categories"], list(reference.capabilities()))
+        self.assertEqual(
+            body["router"]["registered_providers"],
+            list(reference.registered_providers()),
+        )
+        got = {
+            entry["capability"]: entry["provider"]
+            for entry in body["router"]["routing"]
+        }
+        self.assertEqual(got, expected)
+
+        reasoning = next(
+            entry for entry in body["router"]["routing"]
+            if entry["capability"] == "reasoning"
+        )
+        self.assertEqual(reasoning["provider"], "ollama:" + config.model)
+        self.assertEqual(
+            body["orchestrator"]["reasoning_provider"],
+            f"ollama:{config.model}",
+        )
+
+    def test_workbench_router_unconfigured_capabilities_not_fabricated(self):
+        resp = self.client.get("/api/workbench/status")
+        body = resp.json()
+
+        config = load_ollama_config()
+        reference = build_local_model_router(config=config)
+        served = {
+            entry["capability"]: entry["provider"]
+            for entry in reference.list_capabilities()
+            if entry["provider"] is not None
+        }
+
+        # With only the local Ollama provider registered, "reasoning" is the
+        # sole routed capability; nothing else may claim a serving model.
+        self.assertEqual(served, {"reasoning": f"ollama:{config.model}"})
+
+        registered = set(body["router"]["registered_providers"])
+        for entry in body["router"]["routing"]:
+            if entry["capability"] in served:
+                self.assertEqual(entry["provider"], served[entry["capability"]])
+                self.assertIn(entry["provider"], registered)
+            else:
+                self.assertIsNone(entry["provider"])
+                self.assertIn("raises ModelRouterError", entry["logic"])
 
 
 @unittest.skipUnless(
