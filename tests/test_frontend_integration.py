@@ -1,18 +1,22 @@
-"""Phase 4 frontend integration tests.
+"""Frontend integration tests for the recovered Next.js frontend.
 
-The frontend is a static client of the local FastAPI backend. These tests
-verify:
+The original v0.app Next.js frontend in ``frontend/`` is a client of the local
+FastAPI backend. These tests verify:
 
-- the pages/assets are served by the backend
-- the client scripts call the real endpoint contract
+- the API client contract in ``frontend/lib/api.ts`` targets the real backend
+  endpoints and sends the JWT bearer token
+- the result model in ``frontend/lib/result-model.ts`` only reshapes backend
+  payloads and never hard-codes fixture outcomes
+- no cloud service, secret, or fabricated verdict value exists in the Next
+  source tree (app/components/lib)
+- the vanilla Phase-4 static pages are gone (the backend root is the JSON
+  heartbeat, the UI is served by Next itself)
 - the full upload -> process -> fetch workflow through the API returns the
-  exact payload the render layer consumes
-- the render logic (executed under Node) renders decision / deterministic
-  result / verification / human-review without hard-coded results
-- no cloud calls, no secrets, and no fabricated verdicts exist in the UI
+  exact payload the result model consumes (deterministic orchestrator)
+- audit / deliverable endpoints behave with real permissions
+- the result-model + API-client logic passes under Node (native TS stripping)
 """
 
-import json
 import os
 import re
 import subprocess
@@ -42,12 +46,22 @@ from ai_agent.orchestrator.orchestrator import AgentOrchestrator  # noqa: E402
 from ai_agent.plant_safety_integration import evaluate_plant_safety  # noqa: E402
 
 FRONTEND = _REPO / "frontend"
+FIXTURES = _REPO / "ai_agent" / "fixtures"
+
+# Outcome-specific values of the project fixtures. If any of these appear in
+# frontend source the UI is hard-coding results instead of rendering the
+# backend payload.
 HARDCODED_RESULT_VALUES = (
     "ollama:llama3",
     "MR-0003-CONF",
     "hot-work-overlap",
     "isolation-overlap-time-window",
     "permit-conflict",
+    "FLAGGED_FOR_REVIEW",
+    "f0a4c61de8",
+    "OFFICER-07",
+    "audit-2026-0512",
+    "task-2026-0512",
 )
 FORBIDDEN_CLOUD_TOKENS = (
     "openai",
@@ -73,50 +87,30 @@ RESULT_CONTRACT_KEYS = (
 )
 
 
-def _frontend_files(exclude_fixtures: bool = True):
-    for path in FRONTEND.rglob("*"):
-        if path.is_file() and path.suffix in (".html", ".css", ".js"):
-            if exclude_fixtures and "fixtures" in path.parts:
-                continue
+def _source_files():
+    """All Next.js source files that ship to the browser."""
+    for root in ("app", "components", "lib"):
+        base = FRONTEND / root
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if path.is_file() and path.suffix in (".ts", ".tsx"):
+                yield path
+    for name in ("next.config.mjs",):
+        path = FRONTEND / name
+        if path.is_file():
             yield path
 
 
-class FrontendStaticTest(unittest.TestCase):
+class FrontendSourceTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         Base.metadata.create_all(bind=engine)
         cls.client = TestClient(create_app())
 
-    def test_index_served(self):
-        resp = self.client.get("/")
-        self.assertEqual(resp.status_code, 200)
-        body = resp.text
-        self.assertIn("VYOMA", body)
-        self.assertIn("KAVACH", body)
-
-    def test_pages_served(self):
-        for page in ("analysis.html", "result.html", "audit.html"):
-            resp = self.client.get("/" + page)
-            self.assertEqual(resp.status_code, 200, page)
-
-    def test_static_assets_served(self):
-        for asset in (
-            "css/industrial.css",
-            "js/api.js",
-            "js/render.js",
-            "js/auth.js",
-            "js/dashboard.js",
-            "js/analysis.js",
-            "js/result.js",
-            "js/audit.js",
-            "fixtures/conflict_case.json",
-        ):
-            resp = self.client.get("/" + asset)
-            self.assertEqual(resp.status_code, 200, asset)
-
     def test_api_client_uses_backend_endpoints_only(self):
-        src = (FRONTEND / "js" / "api.js").read_text(encoding="utf-8")
+        src = (FRONTEND / "lib" / "api.ts").read_text(encoding="utf-8")
         for endpoint in (
             "/api/health",
             "/api/auth/register",
@@ -129,50 +123,83 @@ class FrontendStaticTest(unittest.TestCase):
             "/api/audit/verify",
         ):
             self.assertIn(endpoint, src)
+        self.assertIn("Authorization", src)
+        self.assertIn("Bearer", src)
 
-    def test_render_declares_task_and_deliverable_links(self):
-        src = (FRONTEND / "js" / "render.js").read_text(encoding="utf-8")
-        self.assertIn("/api/tasks/", src)
-        self.assertIn("deliverables/", src)
+    def test_result_model_maps_backend_payload_shape(self):
+        src = (FRONTEND / "lib" / "result-model.ts").read_text(encoding="utf-8")
+        for key in (
+            "task_id",
+            "status",
+            "permit_id",
+            "scenario",
+            "audit_ref",
+            "rule_result",
+            "rules_triggered",
+            "conflicting_permit_ids",
+            "llm_result",
+            "reasoning_provider",
+            "reasoning_explanation",
+            "agreement",
+            "final_decision",
+            "requires_human_review",
+        ):
+            self.assertIn(key, src)
 
     def test_no_hardcoded_analysis_results_in_ui(self):
         offenders = []
-        for path in _frontend_files():
+        for path in _source_files():
             content = path.read_text(encoding="utf-8")
             for value in HARDCODED_RESULT_VALUES:
                 if value in content:
                     offenders.append(f"{path}:{value}")
         self.assertEqual(offenders, [])
 
-    def test_no_cloud_or_secret_tokens_in_frontend(self):
+    def test_no_cloud_services_or_secrets_in_frontend(self):
         offenders = []
-        for path in _frontend_files(exclude_fixtures=False):
+        for path in _source_files():
             content = path.read_text(encoding="utf-8")
             for token in FORBIDDEN_CLOUD_TOKENS:
                 if token in content:
                     offenders.append(f"{path}:{token}")
             if SECRET_PATTERN.search(content):
                 offenders.append(f"{path}:secret-material")
+        # Vercel analytics shipped no code once the layout stopped importing it.
+        layout = (FRONTEND / "app" / "layout.tsx").read_text(encoding="utf-8")
+        if "@vercel/analytics" in layout:
+            offenders.append("app/layout.tsx:@vercel/analytics")
         self.assertEqual(offenders, [])
 
-    def test_workflow_hooks_in_client_scripts(self):
-        analysis_src = (FRONTEND / "js" / "analysis.js").read_text(encoding="utf-8")
-        result_src = (FRONTEND / "js" / "result.js").read_text(encoding="utf-8")
-        self.assertIn("KavachApi.uploadTask", analysis_src)
-        self.assertIn("KavachApi.processTask", analysis_src)
-        self.assertIn('"result.html?id="', analysis_src)
-        self.assertIn("KavachApi.getTask", result_src)
-        self.assertIn("window.location.search", result_src)
-        self.assertIn("KavachRender.renderResult", result_src)
+    def test_no_vanilla_phase4_static_files(self):
+        for stale in (
+            "index.html",
+            "analysis.html",
+            "result.html",
+            "audit.html",
+            "css/industrial.css",
+            "js/api.js",
+            "js/render.js",
+            "fixtures/conflict_case.json",
+        ):
+            self.assertFalse(
+                (FRONTEND / stale).exists(), f"vanilla static file still present: {stale}"
+            )
 
-    def test_result_page_displays_human_review_banner(self):
-        result_html = (FRONTEND / "result.html").read_text(encoding="utf-8")
-        result_js = (FRONTEND / "js" / "result.js").read_text(encoding="utf-8")
-        self.assertIn('id="human-warning"', result_html)
-        self.assertIn("human-warning", result_js)
+    def test_backend_root_is_json_heartbeat_without_frontend_index(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("VYOMA", resp.text)
+        self.assertFalse((FRONTEND / "index.html").exists())
+
+    def test_next_config_has_no_external_rewrites(self):
+        src = (FRONTEND / "next.config.mjs").read_text(encoding="utf-8")
+        self.assertNotIn("https://", src)
+        self.assertNotIn("rewrites", src)
 
 
 class FrontendWorkflowTest(unittest.TestCase):
+    """Workflow the frontend drives: auth -> upload -> process -> fetch,
+    audit, deliverable downloads. Uses the deterministic orchestrator."""
 
     def setUp(self):
         Base.metadata.drop_all(bind=engine)
@@ -189,27 +216,31 @@ class FrontendWorkflowTest(unittest.TestCase):
                 password_hash=hash_password("pass"),
                 role="SAFETY_OFFICER",
             ))
+            db.add(User(
+                username="worker",
+                password_hash=hash_password("pass"),
+                role="USER",
+            ))
             db.commit()
 
-    def test_workflow_upload_process_fetch(self):
-        token = self.client.post(
+    def _token(self, username: str = "officer") -> str:
+        return self.client.post(
             "/api/auth/login",
-            json={"username": "officer", "password": "pass"},
+            json={"username": username, "password": "pass"},
         ).json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
 
-        with open(FRONTEND / "fixtures" / "conflict_case.json", "rb") as fh:
-            upload = self.client.post(
+    def _upload(self, headers, name: str = "conflict_case.json"):
+        with open(FIXTURES / name, "rb") as fh:
+            return self.client.post(
                 "/api/tasks/upload",
-                files={
-                    "file": (
-                        "conflict_case.json",
-                        fh.read(),
-                        "application/json",
-                    )
-                },
+                files={"file": (name, fh.read(), "application/json")},
                 headers=headers,
             )
+
+    def test_workflow_upload_process_fetch(self):
+        headers = {"Authorization": f"Bearer {self._token()}"}
+
+        upload = self._upload(headers)
         self.assertEqual(upload.status_code, 201)
         payload = upload.json()
         self.assertTrue(payload["task_id"].startswith("TASK-"))
@@ -220,8 +251,7 @@ class FrontendWorkflowTest(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(processed.status_code, 200)
-        processed_json = processed.json()
-        self.assertEqual(processed_json["status"], "COMPLETED")
+        self.assertEqual(processed.json()["status"], "COMPLETED")
 
         fetched = self.client.get(
             f"/api/tasks/{payload['task_id']}",
@@ -242,25 +272,32 @@ class FrontendWorkflowTest(unittest.TestCase):
             result["reasoning_provider"],
             ("DeterministicReasoningEngine", "ollama:llama3"),
         )
-        self.assertFalse(
-            result["reasoning_provider"].lower() in ("openai", "anthropic", "gemini")
-        )
         self.assertTrue(task["audit_ref"].startswith("AUD-"))
         for key in RESULT_CONTRACT_KEYS:
             self.assertIn(key, result)
 
+    def test_audit_feed_and_chain_after_processing(self):
+        headers = {"Authorization": f"Bearer {self._token()}"}
+        upload = self._upload(headers).json()
+        self.client.post(
+            f"/api/tasks/{upload['task_id']}/process",
+            headers=headers,
+        )
+        feed = self.client.get("/api/audit/", headers=headers)
+        self.assertEqual(feed.status_code, 200)
+        self.assertGreaterEqual(len(feed.json()), 1)
+        verify = self.client.get("/api/audit/verify", headers=headers)
+        self.assertEqual(verify.status_code, 200)
+        self.assertTrue(verify.json()["valid"])
+
+    def test_standard_user_cannot_read_audit(self):
+        headers = {"Authorization": f"Bearer {self._token('worker')}"}
+        resp = self.client.get("/api/audit/", headers=headers)
+        self.assertEqual(resp.status_code, 403)
+
     def test_dashboard_recent_tasks_endpoint(self):
-        token = self.client.post(
-            "/api/auth/login",
-            json={"username": "officer", "password": "pass"},
-        ).json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        with open(FRONTEND / "fixtures" / "safe_case.json", "rb") as fh:
-            self.client.post(
-                "/api/tasks/upload",
-                files={"file": ("safe_case.json", fh.read(), "application/json")},
-                headers=headers,
-            )
+        headers = {"Authorization": f"Bearer {self._token()}"}
+        self._upload(headers, "safe_case.json")
         resp = self.client.get("/api/tasks?limit=10", headers=headers)
         self.assertEqual(resp.status_code, 200)
         tasks = resp.json()
@@ -268,19 +305,8 @@ class FrontendWorkflowTest(unittest.TestCase):
         self.assertIn("status", tasks[0])
 
     def test_deliverable_download_endpoint(self):
-        token = self.client.post(
-            "/api/auth/login",
-            json={"username": "officer", "password": "pass"},
-        ).json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        with open(FRONTEND / "fixtures" / "conflict_case.json", "rb") as fh:
-            upload = self.client.post(
-                "/api/tasks/upload",
-                files={
-                    "file": ("conflict_case.json", fh.read(), "application/json")
-                },
-                headers=headers,
-            ).json()
+        headers = {"Authorization": f"Bearer {self._token()}"}
+        upload = self._upload(headers).json()
         self.client.post(
             f"/api/tasks/{upload['task_id']}/process",
             headers=headers,
@@ -299,13 +325,10 @@ class FrontendWorkflowTest(unittest.TestCase):
         self.assertGreater(len(download.content), 0)
 
     def test_deliverable_download_blocks_traversal(self):
-        token = self.client.post(
-            "/api/auth/login",
-            json={"username": "officer", "password": "pass"},
-        ).json()["access_token"]
+        headers = {"Authorization": f"Bearer {self._token()}"}
         resp = self.client.get(
             "/api/tasks/TASK-001/deliverables/..%2F..%2Fsecret.txt",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=headers,
         )
         self.assertEqual(resp.status_code, 404)
 
@@ -316,7 +339,7 @@ class FrontendWorkflowTest(unittest.TestCase):
 )
 class FrontendNodeRenderTest(unittest.TestCase):
 
-    def test_render_logic_passes_under_node(self):
+    def test_result_model_passes_under_node(self):
         proc = subprocess.run(
             ["node", str(_REPO / "tests" / "js" / "render_test.mjs")],
             capture_output=True,

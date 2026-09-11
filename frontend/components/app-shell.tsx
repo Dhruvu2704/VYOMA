@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useToast } from '@/components/toast'
 import {
   LayoutDashboard,
   FilePlus2,
@@ -16,6 +17,7 @@ import {
   PanelLeft,
   Bell,
   ChevronDown,
+  LogIn,
   LogOut,
   User,
   BadgeCheck,
@@ -23,6 +25,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusDot } from '@/components/status-badge'
+import { getCurrentUser, getHealth, isAuthed, logout } from '@/lib/api'
+import { AuthModal, openAuth } from '@/components/auth-modal'
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -48,11 +52,32 @@ const sectionTitles: Record<string, string> = {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const toast = useToast()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenu, setUserMenu] = useState(false)
+  const [user, setUser] = useState<string | null>(null)
+  const [apiUp, setApiUp] = useState<boolean | null>(null)
+
+  const refreshUser = () => setUser(getCurrentUser())
+
+  useEffect(() => {
+    refreshUser()
+    getHealth()
+      .then(() => setApiUp(true))
+      .catch(() => setApiUp(false))
+  }, [])
+
+  const signOut = () => {
+    logout()
+    setUserMenu(false)
+    refreshUser()
+    toast.push({ kind: 'info', title: 'Signed out', message: 'Local session cleared.' })
+  }
 
   const section = sectionTitles[pathname] ?? 'VYOMA KAVACH'
+  const apiConnected = apiUp === true
+  const apiKnown = apiUp !== null
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -118,8 +143,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </p>
             <div className="space-y-1.5 text-xs">
               <div className="flex items-center gap-2 text-foreground">
-                <StatusDot tone="safe" />
-                Backend Connected
+                <StatusDot tone={apiUp === false ? 'danger' : 'safe'} pulse={!apiKnown} />
+                Backend {apiConnected ? 'Connected' : apiKnown ? 'OFFLINE' : 'Connecting'}
               </div>
               <div className="flex items-center gap-2 text-foreground">
                 <StatusDot tone="safe" />
@@ -132,12 +157,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* User profile */}
         <div className="flex items-center gap-3 border-t border-sidebar-border px-4 py-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary font-mono text-xs font-bold text-foreground">
-            07
+            {user ? user.slice(0, 2).toUpperCase() : '–'}
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">Safety Officer</p>
-              <p className="truncate font-mono text-[11px] text-muted-foreground">OFFICER-07</p>
+              <p className="truncate text-sm font-medium text-foreground">
+                {user ? 'Safety Officer' : 'Not signed in'}
+              </p>
+              <p className="truncate font-mono text-[11px] text-muted-foreground">
+                {user ? user.toUpperCase() : 'Sign in to continue'}
+              </p>
             </div>
           )}
         </div>
@@ -178,8 +207,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="hidden items-center gap-3 md:flex">
-              <span className="flex items-center gap-2 rounded border border-safe/25 bg-safe/10 px-2.5 py-1 font-mono text-[11px] text-safe">
-                <StatusDot tone="safe" /> API CONNECTED
+              <span
+                className={cn(
+                  'flex items-center gap-2 rounded border px-2.5 py-1 font-mono text-[11px]',
+                  apiConnected
+                    ? 'border-safe/25 bg-safe/10 text-safe'
+                    : 'border-danger/25 bg-danger/10 text-danger',
+                )}
+              >
+                <StatusDot tone={apiConnected ? 'safe' : 'danger'} />
+                {apiConnected ? 'API CONNECTED' : apiKnown ? 'API OFFLINE' : 'CONNECTING'}
               </span>
               <span className="flex items-center gap-2 rounded border border-info/25 bg-info/10 px-2.5 py-1 font-mono text-[11px] text-info">
                 <StatusDot tone="info" /> ZERO-EGRESS
@@ -202,10 +239,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 aria-expanded={userMenu}
               >
                 <span className="flex size-8 items-center justify-center rounded-full bg-primary/15 font-mono text-xs font-bold text-primary ring-1 ring-primary/30">
-                  07
+                  {user ? user.slice(0, 2).toUpperCase() : '–'}
                 </span>
                 <span className="hidden text-sm font-medium text-foreground sm:block">
-                  Safety Officer
+                  {user ?? 'Sign In'}
                 </span>
                 <ChevronDown className="size-4 text-muted-foreground" />
               </button>
@@ -216,19 +253,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     role="menu"
                     className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-md border border-border bg-card-elevated py-1 shadow-xl"
                   >
-                    <div className="border-b border-border px-3 py-2">
-                      <p className="text-sm font-medium text-foreground">Safety Officer</p>
-                      <p className="font-mono text-xs text-muted-foreground">OFFICER-07</p>
-                    </div>
-                    <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-secondary">
-                      <User className="size-4 text-muted-foreground" /> Profile
-                    </button>
-                    <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-secondary">
-                      <BadgeCheck className="size-4 text-muted-foreground" /> Role &amp; Clearance
-                    </button>
-                    <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10">
-                      <LogOut className="size-4" /> Logout
-                    </button>
+                    {user ? (
+                      <>
+                        <div className="border-b border-border px-3 py-2">
+                          <p className="text-sm font-medium text-foreground">Safety Officer</p>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {user.toUpperCase()}
+                          </p>
+                        </div>
+                        <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-secondary">
+                          <User className="size-4 text-muted-foreground" /> Profile
+                        </button>
+                        <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-secondary">
+                          <BadgeCheck className="size-4 text-muted-foreground" /> Role &amp; Clearance
+                        </button>
+                        <button
+                          onClick={signOut}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10"
+                        >
+                          <LogOut className="size-4" /> Logout
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setUserMenu(false)
+                          openAuth()
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-secondary"
+                      >
+                        <LogIn className="size-4 text-muted-foreground" /> Sign In
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -238,6 +294,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1">{children}</main>
       </div>
+      <AuthModal onUserChange={refreshUser} />
     </div>
   )
 }

@@ -20,7 +20,8 @@ import { PageContainer, PageHeader } from '@/components/page-header'
 import { Panel, PanelHeader } from '@/components/panel'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/toast'
-import { uploadTask } from '@/lib/api'
+import { getCurrentUser, isAuthed, uploadTask } from '@/lib/api'
+import { openAuth } from '@/components/auth-modal'
 
 interface FileState {
   file: File
@@ -140,10 +141,16 @@ export default function NewInspectionPage() {
   const [pid, setPid] = useState<FileState | null>(null)
   const [starting, setStarting] = useState(false)
 
-  const ready = ptw && pid
+  const officer = getCurrentUser()
+  const ready = ptw !== null && ptw.file.name.toLowerCase().endsWith('.json')
 
   const start = async () => {
     if (!ready) return
+
+    if (!isAuthed()) {
+      openAuth()
+      return
+    }
 
     setStarting(true)
 
@@ -168,7 +175,7 @@ export default function NewInspectionPage() {
       toast.push({
         kind: 'error',
         title: 'Upload failed',
-        message: error instanceof Error ? error.message : 'File upload failed',
+        message: error instanceof Error ? error.message : 'File upload failed.',
       })
     } finally {
       setStarting(false)
@@ -179,15 +186,29 @@ export default function NewInspectionPage() {
     <PageContainer>
       <PageHeader
         title="New Safety Inspection"
-        subtitle="Upload a Permit-to-Work and select the corresponding P&ID for automated verification."
+        subtitle="Upload a Permit-to-Work contract envelope for automated verification against the local KAVACH pipeline."
       />
+
+      {!officer && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/5 px-4 py-3">
+          <p className="text-sm text-foreground">
+            Sign in to the local backend before submitting an envelope for verification.
+          </p>
+          <button
+            onClick={openAuth}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Sign In
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <UploadZone
           index="01"
           title="Permit to Work"
-          supported="PDF, DOCX"
-          hint="Drop PTW file here"
+          supported="JSON (KAVACH envelope)"
+          hint="Drop PTW contract envelope here"
           icon={FileText}
           file={ptw}
           onSelect={setPtw}
@@ -196,8 +217,8 @@ export default function NewInspectionPage() {
         <UploadZone
           index="02"
           title="P&ID Drawing"
-          supported="PDF, PNG, JPG"
-          hint="Drop P&ID drawing here"
+          supported="Optional — envelope carries P&ID"
+          hint="Drop P&ID drawing here (optional)"
           icon={Map}
           file={pid}
           onSelect={setPid}
@@ -213,7 +234,7 @@ export default function NewInspectionPage() {
             <SummaryRow label="Permit" value={ptw ? ptw.name.replace(/\.[^.]+$/, '') : '—'} />
             <SummaryRow label="P&ID" value={pid ? pid.name.replace(/\.[^.]+$/, '') : '—'} />
             <SummaryRow label="Inspection Type" value="Full Safety Verification" />
-            <SummaryRow label="Officer" value="OFFICER-07" />
+            <SummaryRow label="Officer" value={officer ? officer.toUpperCase() : 'NOT SIGNED IN'} />
           </dl>
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -261,7 +282,7 @@ export default function NewInspectionPage() {
         </button>
         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
           <Lock className="size-3" />
-          Your files remain within the controlled processing environment.
+          Envelopes stay within the controlled local processing environment.
         </p>
       </div>
     </PageContainer>

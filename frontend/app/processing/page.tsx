@@ -14,12 +14,13 @@ import {
   Cpu,
   ScanSearch,
   Gavel,
+  AlertTriangle,
 } from 'lucide-react'
 import { PageContainer, PageHeader } from '@/components/page-header'
 import { Panel, PanelHeader } from '@/components/panel'
 import { StatusBadge } from '@/components/status-badge'
 import { cn } from '@/lib/utils'
-import { getTaskStatus } from '@/lib/api'
+import { getTaskStatus, startProcessing } from '@/lib/api'
 
 const stages = [
   { id: 1, label: 'File Received', icon: FileCheck2 },
@@ -30,17 +31,6 @@ const stages = [
   { id: 6, label: 'Final Verdict', icon: Gavel },
 ]
 
-const logLines = [
-  'PTW successfully received',
-  'Document extraction completed',
-  'Rule engine analysis started',
-  'Safety constraints evaluated',
-  'LLM analysis in progress...',
-  'P&ID topology graph constructed',
-  'Cross-checking isolation boundaries',
-  'Generating final verdict',
-]
-
 function useNow() {
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -49,63 +39,113 @@ function useNow() {
   }, [])
 }
 
+function now(): string {
+  return new Date().toLocaleTimeString(undefined, { hour12: false })
+}
+
 export default function ProcessingPage() {
   const [taskId, setTaskId] = useState('')
+  const [noTask, setNoTask] = useState(false)
   const [progress, setProgress] = useState(8)
   const [taskStatus, setTaskStatus] = useState('CREATED')
+  const [failedError, setFailedError] = useState('')
   const [log, setLog] = useState<{ time: string; msg: string }[]>([])
   const logRef = useRef<HTMLDivElement>(null)
+  const startedRef = useRef(false)
   useNow()
 
+  // Load the task id handed over by the New Inspection flow.
   useEffect(() => {
     const savedTaskId = sessionStorage.getItem('vyoma_task_id')
     if (savedTaskId) {
       setTaskId(savedTaskId)
+    } else {
+      setNoTask(true)
     }
   }, [])
 
-  useEffect(() => {
-    const taskId = sessionStorage.getItem('vyoma_task_id')
+  // Build the live log purely from real backend transitions.
+  const pushLog = (msg: string) => setLog((prev) => [...prev, { time: now(), msg }])
 
-    if (!taskId) {
-      return
-    }
+  // Once the task id exists, start processing (if CREATED) and poll status.
+  useEffect(() => {
+    const id = taskId
+    if (!id) return
 
     let active = true
 
-    const pollStatus = async () => {
-      try {
-        const task = await getTaskStatus(taskId)
+    const handleTask = async (task: Awaited<ReturnType<typeof getTaskStatus>>) => {
+      if (!active) return
+      setTaskStatus(task.status)
 
-        if (!active) return
-
-        setTaskStatus(task.status)
-
-        if (task.status === 'CREATED') {
-          setProgress(10)
-        } else if (task.status === 'PROCESSING') {
-          setProgress((p) => Math.min(90, Math.max(p, 50)))
-        } else if (task.status === 'COMPLETED') {
-          setProgress(100)
-          active = false
-        } else if (task.status === 'FAILED') {
-          setProgress(0)
-          active = false
+      if (task.status === 'CREATED') {
+        setProgress(12)
+        if (!startedRef.current) {
+          startedRef.current = true
+          pushLog(`Contract envelope ${task.task_id} received`)
+          pushLog('KAVACH AgentOrchestrator invoked (local pipeline)')
+          setProgress(25)
+          try {
+            const processed = await startProcessing(task.task_id)
+            if (!active) return
+            setTaskStatus(processed.status)
+            if (processed.status === 'COMPLETED') {
+              setProgress(100)
+              const provider = processed.result?.reasoning_provider
+              pushLog(
+                provider
+                  ? `Verification complete via ${provider}`
+                  : 'Verification complete (deterministic rule result stands)',
+              )
+              if (processed.audit_ref) pushLog(`Audit record written: ${processed.audit_ref}`)
+              pushLog('Final verdict recorded')
+            } else if (processed.status === 'FAILED') {
+              setProgress(0)
+              setFailedError(processed.error ?? 'KAVACH processing failed')
+            }
+          } catch (error) {
+            if (!active) return
+            setProgress(0)
+            setTaskStatus('FAILED')
+            setFailedError(error instanceof Error ? error.message : 'KAVACH processing failed')
+          }
+        } else {
+          pushLog('Task already queued — awaiting worker')
         }
-      } catch (error) {
-        console.error('Failed to fetch task status:', error)
+      } else if (task.status === 'PROCESSING') {
+        setProgress((p) => Math.min(90, Math.max(p, 45)))
+      } else if (task.status === 'COMPLETED') {
+        setProgress(100)
+        if (task.audit_ref) pushLog(`Audit record written: ${task.audit_ref}`)
+        pushLog('Final verdict recorded')
+      } else if (task.status === 'FAILED') {
+        setProgress(0)
+        setFailedError(task.error ?? 'KAVACH processing failed')
       }
     }
 
-    pollStatus()
+    getTaskStatus(id)
+      .then(handleTask)
+      .catch((error) => {
+        if (active) {
+          setTaskStatus('FAILED')
+          setFailedError(error instanceof Error ? error.message : 'Could not reach the API')
+        }
+      })
 
-    const t = setInterval(pollStatus, 2000)
+    const t = setInterval(() => {
+      getTaskStatus(id)
+        .then(handleTask)
+        .catch(() => {
+          /* transient poll error — keep trying */
+        })
+    }, 2000)
 
     return () => {
       active = false
       clearInterval(t)
     }
-  }, [])
+  }, [taskId])
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -133,7 +173,7 @@ export default function ProcessingPage() {
         action={
           <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 font-mono text-xs">
             <span className="text-muted-foreground">Task</span>
-            <span className="text-foreground">{taskId || 'Loading...'}</span>
+            <span className="text-foreground">{taskId || '—'}</span>
             <StatusBadge
               value={failed ? 'FAILED' : done ? 'VERIFIED' : 'PROCESSING'}
               size="sm"
@@ -141,6 +181,24 @@ export default function ProcessingPage() {
           </div>
         }
       />
+
+      {noTask && (
+        <Panel className="flex flex-col items-center gap-4 border-warning/40 bg-warning/5 p-10 text-center">
+          <AlertTriangle className="size-8 text-warning" />
+          <div>
+            <h3 className="text-lg font-bold text-foreground">No task in progress</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Start a new inspection to upload a permit envelope and run the verification pipeline.
+            </p>
+          </div>
+          <Link
+            href="/new-inspection"
+            className="mt-2 inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Start an Inspection <ArrowRight className="size-4" />
+          </Link>
+        </Panel>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
         {/* Circular progress */}
@@ -153,7 +211,7 @@ export default function ProcessingPage() {
                 cy="100"
                 r={radius}
                 fill="none"
-                stroke="var(--primary)"
+                stroke={failed ? 'var(--danger)' : 'var(--primary)'}
                 strokeWidth="6"
                 strokeLinecap="round"
                 strokeDasharray={circ}
@@ -164,10 +222,10 @@ export default function ProcessingPage() {
             </svg>
             <div className="absolute flex flex-col items-center">
               <span className="font-mono text-4xl font-bold tabular-nums text-foreground">
-                {Math.round(progress)}%
+                {failed ? 0 : Math.round(progress)}%
               </span>
               <span className="mt-1 text-xs text-muted-foreground">
-                {done ? 'Analysis complete' : 'Analyzing permit…'}
+                {failed ? 'Analysis failed' : done ? 'Analysis complete' : 'Analyzing permit…'}
               </span>
             </div>
           </div>
@@ -178,6 +236,13 @@ export default function ProcessingPage() {
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               View Verdict <ArrowRight className="size-4" />
+            </Link>
+          ) : failed ? (
+            <Link
+              href="/new-inspection"
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              Start New Inspection <ArrowRight className="size-4" />
             </Link>
           ) : (
             <p className="mt-6 flex items-center gap-2 font-mono text-xs text-info">
@@ -251,8 +316,11 @@ export default function ProcessingPage() {
               ref={logRef}
               className="h-44 overflow-y-auto rounded-md border border-border bg-background/70 p-3 font-mono text-xs leading-relaxed"
             >
-              {log.length === 0 && (
+              {log.length === 0 && !failed && (
                 <p className="text-muted-foreground">Awaiting system output…</p>
+              )}
+              {log.length === 0 && failed && (
+                <p className="text-danger">Pipeline stopped: {failedError}</p>
               )}
               {log.map((l, i) => (
                 <div key={i} className="flex gap-3">
@@ -261,7 +329,14 @@ export default function ProcessingPage() {
                   <span className="text-foreground/90">{l.msg}</span>
                 </div>
               ))}
-              {!done && log.length > 0 && (
+              {failed && (
+                <div className="flex gap-3">
+                  <span className="shrink-0 text-muted-foreground">{now()}</span>
+                  <span className="text-danger">›</span>
+                  <span className="text-danger">{failedError}</span>
+                </div>
+              )}
+              {!done && !failed && log.length > 0 && (
                 <span className="ml-6 inline-block h-3 w-1.5 animate-status-pulse bg-info align-middle" />
               )}
             </div>

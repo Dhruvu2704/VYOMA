@@ -6,7 +6,7 @@ import { Panel } from '@/components/panel'
 import { StatusBadge } from '@/components/status-badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/toast'
-import { submitReview } from '@/lib/api'
+import { getCurrentUser, submitReview } from '@/lib/api'
 
 export function ReviewPanel({
   ruleResult,
@@ -22,6 +22,9 @@ export function ReviewPanel({
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  const [resultNote, setResultNote] = useState('')
+
+  const officer = getCurrentUser()
 
   const submit = async () => {
     if (!decision || notes.trim().length < 5) {
@@ -29,10 +32,20 @@ export function ReviewPanel({
       return
     }
     setSubmitting(true)
-    await submitReview(decision, notes)
-    setSubmitting(false)
-    setDone(true)
-    toast.push({ kind: 'success', title: 'Decision recorded', message: 'Submitted to the audit ledger.' })
+    try {
+      const result = await submitReview(decision, notes)
+      setResultNote(result.note)
+      setDone(true)
+      toast.push({ kind: 'success', title: 'Decision recorded', message: 'Recorded locally; sign-off reaches the audit ledger through the plant system.' })
+    } catch (error) {
+      toast.push({
+        kind: 'error',
+        title: 'Could not record decision',
+        message: error instanceof Error ? error.message : 'Unknown error.',
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (done) {
@@ -43,15 +56,14 @@ export function ReviewPanel({
           <div>
             <p className="text-lg font-bold text-foreground">Decision recorded</p>
             <p className="text-sm text-muted-foreground">
-              Decision has been submitted to the audit ledger under OFFICER-07.
+              Sign-off by {officer ? officer.toUpperCase() : 'anonymous'} was recorded in this session.
             </p>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/50 p-3 font-mono text-xs">
           <span className="text-muted-foreground">DECISION</span>
           <StatusBadge value={decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'} size="sm" />
-          <span className="text-muted-foreground">HASH</span>
-          <span className="text-foreground">f0a4c61de8</span>
+          <span className="text-foreground">{resultNote || 'Client-side record'}</span>
         </div>
       </Panel>
     )
@@ -126,7 +138,9 @@ export function ReviewPanel({
             className="w-full resize-none rounded-md border border-border bg-background/60 p-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
           />
           <div className="mt-2 flex items-center justify-between">
-            <span className="font-mono text-xs text-muted-foreground">Officer ID: OFFICER-07</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              Officer ID: {officer ? officer.toUpperCase() : 'NOT SIGNED IN'}
+            </span>
             <button
               onClick={submit}
               disabled={submitting}

@@ -23,7 +23,7 @@ export function AnalysisCard({
   checks?: string[]
   issues: DetectedIssue[]
 }) {
-  const tone = result === 'SAFE' ? 'safe' : 'danger'
+  const tone = result === 'SAFE' || result === 'PASS' ? 'safe' : 'danger'
   return (
     <Panel corners className="flex flex-col">
       <div className="flex items-center justify-between border-b border-border p-4">

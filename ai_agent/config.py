@@ -35,7 +35,10 @@ class OllamaConfig:
 
     base_url: str = "http://127.0.0.1:11434"
     model: str = "llama3"
-    timeout: float = 60.0
+    # Full-context reasoning against the local model commonly runs ~50s
+    # (or longer when the model is cold-loaded); 60s was too tight and
+    # caused spurious OllamaTimeoutError failures of the reason stage.
+    timeout: float = 300.0
 
 
 def load_ollama_config(

@@ -23,27 +23,37 @@ const toneClasses: Record<Tone, string> = {
 // Map a domain value to a tone + icon + label
 const map: Record<string, { tone: Tone; icon: LucideIcon; label: string }> = {
   SAFE: { tone: 'safe', icon: ShieldCheck, label: 'SAFE' },
+  PASS: { tone: 'safe', icon: ShieldCheck, label: 'PASS' },
   VERIFIED: { tone: 'safe', icon: Check, label: 'VERIFIED' },
+  COMPLETED: { tone: 'safe', icon: Check, label: 'COMPLETED' },
   APPROVED: { tone: 'safe', icon: ShieldCheck, label: 'APPROVED' },
   ACTIVE: { tone: 'safe', icon: Check, label: 'ACTIVE' },
   AGREE: { tone: 'safe', icon: Check, label: 'AGREE' },
   HEALTHY: { tone: 'safe', icon: Check, label: 'HEALTHY' },
+  SYNCED: { tone: 'safe', icon: Check, label: 'SYNCED' },
+  ONLINE: { tone: 'safe', icon: Check, label: 'ONLINE' },
   UP: { tone: 'safe', icon: Check, label: 'UP' },
 
   FLAGGED: { tone: 'danger', icon: ShieldAlert, label: 'FLAGGED' },
   REJECTED: { tone: 'danger', icon: ShieldX, label: 'REJECTED' },
+  FAILED: { tone: 'danger', icon: X, label: 'FAILED' },
+  VIOLATION: { tone: 'danger', icon: ShieldX, label: 'VIOLATION' },
   BLOCKED: { tone: 'danger', icon: X, label: 'BLOCKED' },
   HIGH: { tone: 'danger', icon: AlertTriangle, label: 'HIGH' },
+  OFFLINE: { tone: 'danger', icon: X, label: 'OFFLINE' },
 
   REVIEW: { tone: 'warning', icon: AlertTriangle, label: 'REVIEW' },
   DISAGREE: { tone: 'warning', icon: AlertTriangle, label: 'DISAGREE' },
   PENDING: { tone: 'warning', icon: AlertTriangle, label: 'PENDING' },
   MEDIUM: { tone: 'warning', icon: AlertTriangle, label: 'MEDIUM' },
 
+  CREATED: { tone: 'info', icon: Check, label: 'CREATED' },
   PROCESSING: { tone: 'info', icon: Loader2, label: 'PROCESSING' },
   ENFORCED: { tone: 'info', icon: ShieldCheck, label: 'ENFORCED' },
   MONITORED: { tone: 'info', icon: Check, label: 'MONITORED' },
   LOW: { tone: 'info', icon: Check, label: 'LOW' },
+
+  UNAVAILABLE: { tone: 'muted', icon: X, label: 'UNAVAILABLE' },
 }
 
 export function StatusBadge({
