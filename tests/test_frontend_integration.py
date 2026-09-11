@@ -95,6 +95,7 @@ RESULT_CONTRACT_KEYS = (
     "agreement",
     "requires_human_review",
     "explanation",
+    "execution_trace",
 )
 
 
@@ -154,6 +155,8 @@ class FrontendSourceTest(unittest.TestCase):
             "agreement",
             "final_decision",
             "requires_human_review",
+            "execution_trace",
+            "step.stage",
         ):
             self.assertIn(key, src)
 
@@ -176,6 +179,18 @@ class FrontendSourceTest(unittest.TestCase):
                 if token in content:
                     offenders.append(f"{path}:{token}")
         self.assertEqual(offenders, [])
+
+    def test_agent_execution_trace_renders_from_payload_only(self):
+        # The verdict page must render the per-stage trace from the backend
+        # execution_trace payload (step.stage), never from a hardcoded stage list.
+        verdict = (FRONTEND / "app" / "verdict" / "page.tsx").read_text(encoding="utf-8")
+        self.assertIn("v.executionTrace", verdict)
+        self.assertIn("step.stage", verdict)
+        hardcoded = ",".join(AgentOrchestrator.PIPELINE_STAGES)
+        for path in _source_files():
+            self.assertNotIn(
+                hardcoded, path.read_text(encoding="utf-8"), msg=f"{path}"
+            )
 
     def test_no_cloud_services_or_secrets_in_frontend(self):
         offenders = []
@@ -297,6 +312,17 @@ class FrontendWorkflowTest(unittest.TestCase):
         self.assertTrue(task["audit_ref"].startswith("AUD-"))
         for key in RESULT_CONTRACT_KEYS:
             self.assertIn(key, result)
+        # The persisted agent execution trace must reflect the real orchestrator
+        # stage progression, never a fabricated placeholder list.
+        trace = result["execution_trace"]
+        self.assertEqual(
+            [step["stage"] for step in trace],
+            AgentOrchestrator.PIPELINE_STAGES,
+        )
+        for step in trace:
+            self.assertEqual(sorted(step.keys()), ["stage", "status", "timestamp"])
+            self.assertIn(step["status"], ("completed", "failed", "running"))
+            self.assertTrue(step["timestamp"])
 
     def test_audit_feed_and_chain_after_processing(self):
         headers = {"Authorization": f"Bearer {self._token()}"}
@@ -420,6 +446,9 @@ class WorkbenchStatusTest(unittest.TestCase):
         # The granting property: no external destination observed since start.
         self.assertEqual(body["external_observed_since_start"], 0)
         self.assertIsInstance(body["interfaces"], list)
+        for iface in body["interfaces"]:
+            for addr in iface["addresses"]:
+                self.assertNotIn(addr["family"], {"2", "10", "23", "-1"})
         self.assertIn("valid", body["audit_chain"])
         self.assertIn("sampled_at", body)
         for conn in body["external_connections"]:

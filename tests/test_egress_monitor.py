@@ -76,6 +76,10 @@ class EgressMonitorRuntimeTests(unittest.TestCase):
             self.assertIsNotNone(conn["raddr"])
             self.assertNotEqual(conn["raddr"]["ip"].split(".")[0], "127")
             self.assertNotEqual(conn["raddr"]["ip"], "::1")
+        for conn in snap["local_connections"]:
+            self.assertIn(conn["family"], {"IPv4", "IPv6"})
+        for conn in snap["external_connections"]:
+            self.assertIn(conn["family"], {"IPv4", "IPv6"})
 
     def test_interface_summary_is_real(self) -> None:
         ifaces = network_interface_summary()
@@ -85,6 +89,9 @@ class EgressMonitorRuntimeTests(unittest.TestCase):
             self.assertIn("is_up", iface)
             self.assertIn("addresses", iface)
             self.assertIsInstance(iface["is_up"], bool)
+            for addr in iface["addresses"]:
+                self.assertIn("family", addr)
+                self.assertNotIn(addr["family"], {"2", "10", "23", "-1"})
 
     def test_external_observed_stays_zero_during_real_local_ollama_request(self) -> None:
         config = load_ollama_config()

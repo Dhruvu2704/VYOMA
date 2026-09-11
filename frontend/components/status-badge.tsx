@@ -49,6 +49,7 @@ const map: Record<string, { tone: Tone; icon: LucideIcon; label: string }> = {
 
   CREATED: { tone: 'info', icon: Check, label: 'CREATED' },
   PROCESSING: { tone: 'info', icon: Loader2, label: 'PROCESSING' },
+  RUNNING: { tone: 'info', icon: Loader2, label: 'RUNNING' },
   ENFORCED: { tone: 'info', icon: ShieldCheck, label: 'ENFORCED' },
   MONITORED: { tone: 'info', icon: Check, label: 'MONITORED' },
   LOW: { tone: 'info', icon: Check, label: 'LOW' },

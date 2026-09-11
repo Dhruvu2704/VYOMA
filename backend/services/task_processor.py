@@ -97,6 +97,11 @@ def _persist_result(db, task: Task, result: Dict[str, Any]) -> None:
                 for item in (result.get("retrieved_context") or [])
                 if isinstance(item, dict)
             ],
+            "execution_trace": [
+                dict(item)
+                for item in (result.get("execution_trace") or [])
+                if isinstance(item, dict)
+            ],
         }
     )
 

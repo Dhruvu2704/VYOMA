@@ -10,6 +10,12 @@ export interface ResultIssue {
   detail: string
 }
 
+export interface ExecutionTraceStep {
+  stage: string
+  status: string
+  timestamp: string
+}
+
 export interface VerdictModel {
   taskId: string
   permitId: string
@@ -28,6 +34,7 @@ export interface VerdictModel {
   reasoningProvider: string | null
   deterministicEvaluated: boolean
   auditRef: string | null
+  executionTrace: ExecutionTraceStep[]
 }
 
 // Structural subset of the backend task payload (see backend/api/tasks.py).
@@ -50,6 +57,7 @@ interface VerdictTask {
     final_decision: string | null
     requires_human_review: boolean | null
     explanation: string | null
+    execution_trace: Array<{ stage: string; status: string; timestamp: string }> | null
   } | null
 }
 
@@ -97,5 +105,10 @@ export function buildVerdictModel(task: VerdictTask): VerdictModel {
     reasoningProvider: r?.reasoning_provider ?? null,
     deterministicEvaluated: r?.deterministic_safety_evaluated ?? false,
     auditRef: task.audit_ref,
+    executionTrace: (r?.execution_trace ?? []).map((step) => ({
+      stage: step.stage,
+      status: step.status,
+      timestamp: step.timestamp,
+    })),
   }
 }

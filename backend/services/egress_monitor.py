@@ -52,11 +52,23 @@ def _addr_to_dict(addr: Any) -> Optional[Dict[str, Any]]:
     return {"ip": getattr(addr, "ip", None), "port": getattr(addr, "port", None)}
 
 
+LOGICAL_FAMILY_NAMES = {
+    "AF_INET": "IPv4",
+    "AF_INET6": "IPv6",
+    "AF_LINK": "MAC",
+}
+
+
 def _family_name(family: Any) -> str:
-    try:
-        return str(family).split(".")[-1]
-    except Exception:  # pragma: no cover - defensive only
-        return str(family)
+    """Human-readable label (``IPv4``/``IPv6``/``MAC``) for an address family.
+
+    Derives the label from the stdlib enum's ``name`` (never a raw numeric
+    value), falling back to the string form only when no named enum exists.
+    """
+    name = getattr(family, "name", None)
+    if name in LOGICAL_FAMILY_NAMES:
+        return LOGICAL_FAMILY_NAMES[name]
+    return name or str(family)
 
 
 def network_interface_summary() -> List[Dict[str, Any]]:

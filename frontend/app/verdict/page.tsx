@@ -13,9 +13,10 @@ import {
   Map,
   FileDown,
   Loader2,
+  Route,
 } from 'lucide-react'
 import { PageContainer, PageHeader } from '@/components/page-header'
-import { Panel } from '@/components/panel'
+import { Panel, PanelHeader } from '@/components/panel'
 import { AnalysisCard } from '@/components/verdict/analysis-card'
 import { ReviewPanel } from '@/components/verdict/review-panel'
 import { StatusBadge } from '@/components/status-badge'
@@ -238,6 +239,33 @@ export default function VerdictPage() {
           <ReviewPanel ruleResult={v.ruleResult} llmResult={v.llmResult} agreement={v.agreement} />
         </div>
       )}
+
+      {/* Agent execution trace */}
+      <Panel corners className="mt-6">
+        <PanelHeader title="Agent Execution Trace" icon={Route} />
+        {v.executionTrace.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">
+            No execution trace was recorded for this task yet. It may still be queued or awaiting processing.
+          </p>
+        ) : (
+          <ol className="divide-y divide-border">
+            {v.executionTrace.map((step, index) => (
+              <li key={`${step.stage}-${index}`} className="flex items-center gap-3 px-4 py-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border font-mono text-xs text-muted-foreground">
+                  {index + 1}
+                </span>
+                <span className="font-mono text-sm text-foreground">{step.stage}</span>
+                <span className="ml-auto flex items-center gap-3">
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {step.timestamp ? new Date(step.timestamp).toLocaleString() : '—'}
+                  </span>
+                  <StatusBadge value={step.status.toUpperCase()} size="sm" />
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Panel>
     </PageContainer>
   )
 }

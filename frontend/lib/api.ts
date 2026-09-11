@@ -108,6 +108,12 @@ export interface BackendDeliverable {
   sha256: string
 }
 
+export interface BackendExecutionTraceStep {
+  stage: string
+  status: string
+  timestamp: string
+}
+
 export interface BackendTaskResult {
   deterministic_safety_evaluated: boolean
   rule_result: string | null
@@ -122,6 +128,7 @@ export interface BackendTaskResult {
   requires_human_review: boolean
   explanation: string
   generated_at: string | null
+  execution_trace: BackendExecutionTraceStep[] | null
 }
 
 export interface BackendTask {
