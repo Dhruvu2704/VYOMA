@@ -1,0 +1,115 @@
+{
+  "plant_id": "MockRefinery",
+  "ptws": [
+    {
+      "permit_id": "PTW-2026-001",
+      "work_type": "INSPECTION",
+      "scope": "Routine inspection of T-101",
+      "location": ["T-101"],
+      "start_time": "2026-09-05T08:00:00",
+      "end_time": "2026-09-05T09:00:00",
+      "issuer": "ENGINEER-01",
+      "equipment_tags": ["T-101"],
+      "isolation_points": []
+    },
+    {
+      "permit_id": "PTW-2026-002",
+      "work_type": "MAINTENANCE",
+      "scope": "Pump maintenance",
+      "location": ["P-101"],
+      "start_time": "2026-09-05T09:00:00",
+      "end_time": "2026-09-05T12:00:00",
+      "issuer": "ENGINEER-02",
+      "equipment_tags": ["P-101", "V-102"],
+      "isolation_points": ["V-102"]
+    },
+    {
+      "permit_id": "PTW-2026-003",
+      "work_type": "INSPECTION",
+      "scope": "Gauge inspection",
+      "location": ["G-101"],
+      "start_time": "2026-09-05T10:00:00",
+      "end_time": "2026-09-05T11:00:00",
+      "issuer": "ENGINEER-01",
+      "equipment_tags": ["G-101", "V-101"],
+      "isolation_points": ["V-101"]
+    },
+    {
+      "permit_id": "PTW-2026-004",
+      "work_type": "MAINTENANCE",
+      "scope": "Heat exchanger inspection",
+      "location": ["HX-101"],
+      "start_time": "2026-09-05T11:00:00",
+      "end_time": "2026-09-05T13:00:00",
+      "issuer": "ENGINEER-03",
+      "equipment_tags": ["HX-101", "V-104", "V-105", "V-102"],
+      "isolation_points": ["V-104", "V-105", "V-102"]
+    },
+    {
+      "permit_id": "PTW-2026-005",
+      "work_type": "INSPECTION",
+      "scope": "Inspection around G-101 and V-101; exact isolation dependency is not confirmed.",
+      "location": ["G-101", "V-101"],
+      "start_time": "2026-09-05T11:30:00",
+      "end_time": "2026-09-05T12:30:00",
+      "issuer": "ENGINEER-02",
+      "equipment_tags": ["G-101", "V-101"],
+      "isolation_points": []
+    },
+    {
+      "permit_id": "PTW-2026-006",
+      "work_type": "MAINTENANCE",
+      "scope": "Bypass valve maintenance",
+      "location": ["V-103"],
+      "start_time": "2026-09-05T14:00:00",
+      "end_time": "2026-09-05T16:00:00",
+      "issuer": "ENGINEER-02",
+      "equipment_tags": ["V-103"],
+      "isolation_points": ["V-103"]
+    },
+    {
+      "permit_id": "PTW-2026-007",
+      "work_type": "HOT_WORK",
+      "scope": "Welding preparation near L-101",
+      "location": ["L-101"],
+      "start_time": "2026-09-05T15:00:00",
+      "end_time": "2026-09-05T17:00:00",
+      "issuer": "ENGINEER-04",
+      "equipment_tags": ["L-101"],
+      "isolation_points": []
+    },
+    {
+      "permit_id": "PTW-2026-008",
+      "work_type": "MAINTENANCE",
+      "scope": "Planned line maintenance",
+      "location": ["L-102"],
+      "start_time": "2026-09-05T17:00:00",
+      "end_time": "2026-09-05T19:00:00",
+      "issuer": "ENGINEER-03",
+      "equipment_tags": ["L-102", "V-101"],
+      "isolation_points": ["V-101"]
+    },
+    {
+      "permit_id": "PTW-2026-009",
+      "work_type": "ISOLATION",
+      "scope": "Temporary reopening of V-101 during controlled maintenance",
+      "location": ["V-101", "L-101"],
+      "start_time": "2026-09-05T10:30:00",
+      "end_time": "2026-09-05T12:30:00",
+      "issuer": "ENGINEER-05",
+      "equipment_tags": ["V-101", "L-101"],
+      "isolation_points": ["V-101"]
+    },
+    {
+      "permit_id": "PTW-2026-014",
+      "work_type": "HOT_WORK",
+      "scope": "Hot work near L-101",
+      "location": ["L-101"],
+      "start_time": "2026-09-05T10:00:00",
+      "end_time": "2026-09-05T14:00:00",
+      "issuer": "ENGINEER-01",
+      "equipment_tags": ["V-101", "L-101"],
+      "isolation_points": ["V-101"]
+    }
+  ]
+}

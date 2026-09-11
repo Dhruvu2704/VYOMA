@@ -1,0 +1,94 @@
+{
+  "scenario": "safe",
+  "description": "Synthetic MockRefinery safe case. Intended outcome: PASS / PASS / AGREE / PASS / no human review.",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0001-SAFE",
+    "task_type": "ptw_review",
+    "document_refs": ["mock:ptw/safe_0001.json"],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0001-SAFE",
+    "work_type": "cold-work",
+    "scope": "Replace a pressure gauge on the cooling water return line.",
+    "location": ["Unit-7", "Pump-Area"],
+    "start_time": "2026-09-06T08:00:00Z",
+    "end_time": "2026-09-06T16:00:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/safe_0001.json",
+    "equipment_tags": ["CW-101", "P-101", "G-101"],
+    "isolation_points": [],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.99,
+      "scope": 0.98,
+      "equipment_tags": 0.97,
+      "isolation_points": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "structured_pid": {
+    "pid_id": "PID-SAFE-0001",
+    "source": "mock:pid/safe_0001.dwg",
+    "equipment_tags": ["CW-101", "P-101", "G-101"],
+    "symbols": [
+      {
+        "symbol_id": "P-101",
+        "symbol_type": "PUMP",
+        "properties": {"service": "cooling-water-return", "tag_resolved": true},
+        "connections": ["CW-101"]
+      },
+      {
+        "symbol_id": "CW-101",
+        "symbol_type": "LINE",
+        "properties": {"line_class": "cooling-water"},
+        "connections": ["P-101", "G-101"]
+      },
+      {
+        "symbol_id": "G-101",
+        "symbol_type": "INSTRUMENT",
+        "properties": {"measurand": "pressure", "tag_resolved": true},
+        "connections": ["CW-101"]
+      }
+    ],
+    "connections": [
+      {"source": "P-101", "target": "CW-101", "line_ref": "CW-101"},
+      {"source": "CW-101", "target": "G-101", "line_ref": "CW-101"}
+    ],
+    "unresolved_symbols": [],
+    "field_confidence": {
+      "equipment_tags": 0.98,
+      "symbols": 0.97,
+      "connections": 0.96,
+      "unresolved_symbols": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "graph_facts": {
+    "permit_id": "MR-0001-SAFE",
+    "resolved_nodes": ["CW-101", "P-101", "G-101"],
+    "unresolved_tags": [],
+    "connected_equipment": {
+      "P-101": ["CW-101"],
+      "G-101": ["CW-101"]
+    },
+    "active_isolations": [],
+    "overlap_check": {
+      "overlapping_permits": [],
+      "same_area_active": false
+    }
+  },
+  "rule_verdict": {
+    "permit_id": "MR-0001-SAFE",
+    "conflicting_permit_ids": [],
+    "rules_triggered": ["no-conflict", "tags-resolved"],
+    "rule_result": "PASS",
+    "explanation": "All equipment tags resolved, no overlapping permits in the same area, and no active isolations conflict.",
+    "confidence": "HIGH"
+  },
+  "expected_llm_result": "PASS",
+  "expected_agreement": "AGREE",
+  "expected_final_decision": "PASS",
+  "expected_human_review": false
+}

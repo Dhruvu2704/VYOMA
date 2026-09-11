@@ -1,0 +1,20 @@
+{
+  "plant_id": "MockRefinery",
+  "sops": [
+    {
+      "sop_id": "SOP-ISO-001",
+      "title": "Isolation and Reopening of Process Valves",
+      "snippet": "Before maintenance begins, required isolation valves must be identified, isolated, and verified. A valve that has been isolated for active maintenance must not be reopened unless the reopening is authorized, controlled, and confirmed against all active permits."
+    },
+    {
+      "sop_id": "SOP-HW-001",
+      "title": "Hot Work Near Process Equipment",
+      "snippet": "Hot work near process lines or equipment requires confirmation that the work area is safe and that applicable isolation controls remain effective for the duration of the permit. Conflicting permits or changes to isolation status require safety review before work continues."
+    },
+    {
+      "sop_id": "SOP-PTW-001",
+      "title": "Permit-to-Work Coordination",
+      "snippet": "Before issuing or continuing a permit, the responsible issuer must consider existing active permits, equipment involved, isolation points, work locations, and overlapping time windows. Potential conflicts must be escalated for human safety review."
+    }
+  ]
+}

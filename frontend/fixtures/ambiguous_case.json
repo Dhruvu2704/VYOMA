@@ -1,0 +1,78 @@
+{
+  "scenario": "ambiguous",
+  "description": "Synthetic MockRefinery ambiguous case. Contains unresolved equipment/tag information, so it must NOT result in automatic approval. Intended outcome: human review = true, no automatic approval.",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0004-AMB",
+    "task_type": "ptw_review",
+    "document_refs": ["mock:ptw/ambiguous_0004.json"],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0004-AMB",
+    "work_type": "confined-space",
+    "scope": "Inspection inside storage tank T-410; several instrument tags illegible on the sketch.",
+    "location": ["Unit-9", "Tank-Farm"],
+    "start_time": "2026-09-06T10:00:00Z",
+    "end_time": "2026-09-06T14:00:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/ambiguous_0004.json",
+    "equipment_tags": ["T-410"],
+    "isolation_points": [],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.98,
+      "scope": 0.96,
+      "equipment_tags": 0.78,
+      "isolation_points": 0.85
+    },
+    "low_confidence_fields": ["equipment_tags"]
+  },
+  "structured_pid": {
+    "pid_id": "PID-AMB-0004",
+    "source": "mock:pid/ambiguous_0004.dwg",
+    "equipment_tags": ["T-410"],
+    "symbols": [
+      {
+        "symbol_id": "T-410",
+        "symbol_type": "STORAGE_TANK",
+        "properties": {"service": "storage", "tag_resolved": true},
+        "connections": []
+      }
+    ],
+    "connections": [],
+    "unresolved_symbols": ["TAG-7X-TEMP", "TAG-7X-LEVEL"],
+    "field_confidence": {
+      "equipment_tags": 0.78,
+      "symbols": 0.88,
+      "connections": 0.8,
+      "unresolved_symbols": 0.0
+    },
+    "low_confidence_fields": ["unresolved_symbols", "symbols"]
+  },
+  "graph_facts": {
+    "permit_id": "MR-0004-AMB",
+    "resolved_nodes": ["T-410"],
+    "unresolved_tags": ["TAG-7X-TEMP", "TAG-7X-LEVEL"],
+    "connected_equipment": {
+      "T-410": []
+    },
+    "active_isolations": [],
+    "overlap_check": {
+      "overlapping_permits": [],
+      "same_area_active": true
+    }
+  },
+  "rule_verdict": {
+    "permit_id": "MR-0004-AMB",
+    "conflicting_permit_ids": [],
+    "rules_triggered": ["unresolved-tags"],
+    "rule_result": "FLAGGED",
+    "explanation": "Two instrument tags on the P&ID could not be resolved; there is insufficient evidence to confirm isolation state.",
+    "confidence": "LOW"
+  },
+  "expected_llm_result": "FLAGGED",
+  "expected_agreement": "AGREE",
+  "expected_final_decision": "FLAGGED_FOR_REVIEW",
+  "expected_human_review": true
+}

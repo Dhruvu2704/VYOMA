@@ -22,3 +22,8 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Backend runtime artifacts
+*.db
+uploads/
+outputs/

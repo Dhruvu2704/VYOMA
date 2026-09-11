@@ -1,0 +1,77 @@
+{
+  "plant_id": "MockRefinery",
+  "equipment": [
+    {
+      "tag": "T-101",
+      "type": "TANK",
+      "description": "Feed tank",
+      "isolation_capable": false
+    },
+    {
+      "tag": "P-101",
+      "type": "PUMP",
+      "description": "Feed transfer pump",
+      "isolation_capable": false
+    },
+    {
+      "tag": "V-101",
+      "type": "VALVE",
+      "description": "Feed isolation valve",
+      "isolation_capable": true
+    },
+    {
+      "tag": "V-102",
+      "type": "VALVE",
+      "description": "Pump discharge isolation valve",
+      "isolation_capable": true
+    },
+    {
+      "tag": "V-103",
+      "type": "VALVE",
+      "description": "Bypass isolation valve",
+      "isolation_capable": true
+    },
+    {
+      "tag": "L-101",
+      "type": "LINE",
+      "description": "Hot-work process line",
+      "isolation_capable": false
+    },
+    {
+      "tag": "L-102",
+      "type": "LINE",
+      "description": "Transfer line",
+      "isolation_capable": false
+    },
+    {
+      "tag": "HX-101",
+      "type": "HEAT_EXCHANGER",
+      "description": "Process heat exchanger",
+      "isolation_capable": true
+    },
+    {
+      "tag": "V-104",
+      "type": "VALVE",
+      "description": "Heat-exchanger inlet isolation",
+      "isolation_capable": true
+    },
+    {
+      "tag": "V-105",
+      "type": "VALVE",
+      "description": "Heat-exchanger outlet isolation",
+      "isolation_capable": true
+    },
+    {
+      "tag": "G-101",
+      "type": "GAUGE",
+      "description": "Pressure gauge",
+      "isolation_capable": false
+    },
+    {
+      "tag": "S-101",
+      "type": "SEPARATOR",
+      "description": "Process separator",
+      "isolation_capable": true
+    }
+  ]
+}

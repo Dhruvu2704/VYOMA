@@ -1,0 +1,33 @@
+{
+  "plant_id": "MockRefinery",
+  "active_permits": [
+    {
+      "permit_id": "PTW-2026-002",
+      "location": ["P-101"],
+      "start_time": "2026-09-05T09:00:00",
+      "end_time": "2026-09-05T12:00:00",
+      "status": "ACTIVE"
+    },
+    {
+      "permit_id": "PTW-2026-003",
+      "location": ["G-101", "V-101"],
+      "start_time": "2026-09-05T10:00:00",
+      "end_time": "2026-09-05T11:00:00",
+      "status": "ACTIVE"
+    },
+    {
+      "permit_id": "PTW-2026-009",
+      "location": ["V-101", "L-101"],
+      "start_time": "2026-09-05T10:30:00",
+      "end_time": "2026-09-05T12:30:00",
+      "status": "ACTIVE"
+    },
+    {
+      "permit_id": "PTW-2026-014",
+      "location": ["L-101"],
+      "start_time": "2026-09-05T10:00:00",
+      "end_time": "2026-09-05T14:00:00",
+      "status": "ACTIVE"
+    }
+  ]
+}

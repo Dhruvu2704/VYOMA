@@ -1,0 +1,55 @@
+{
+  "plant_id": "MockRefinery",
+  "connections": [
+    {
+      "source": "T-101",
+      "target": "V-101",
+      "line_ref": "L-102"
+    },
+    {
+      "source": "V-101",
+      "target": "P-101",
+      "line_ref": "L-102"
+    },
+    {
+      "source": "P-101",
+      "target": "V-102",
+      "line_ref": "L-102"
+    },
+    {
+      "source": "V-102",
+      "target": "HX-101",
+      "line_ref": "L-102"
+    },
+    {
+      "source": "HX-101",
+      "target": "V-104",
+      "line_ref": "L-101"
+    },
+    {
+      "source": "V-104",
+      "target": "V-105",
+      "line_ref": "L-101"
+    },
+    {
+      "source": "V-105",
+      "target": "S-101",
+      "line_ref": "L-101"
+    },
+    {
+      "source": "P-101",
+      "target": "V-103",
+      "line_ref": "L-102"
+    },
+    {
+      "source": "V-103",
+      "target": "S-101",
+      "line_ref": "L-101"
+    },
+    {
+      "source": "V-101",
+      "target": "G-101",
+      "line_ref": "L-102"
+    }
+  ]
+}
