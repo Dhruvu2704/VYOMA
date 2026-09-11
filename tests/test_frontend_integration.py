@@ -165,6 +165,12 @@ class FrontendStaticTest(unittest.TestCase):
         self.assertIn("window.location.search", result_src)
         self.assertIn("KavachRender.renderResult", result_src)
 
+    def test_result_page_displays_human_review_banner(self):
+        result_html = (FRONTEND / "result.html").read_text(encoding="utf-8")
+        result_js = (FRONTEND / "js" / "result.js").read_text(encoding="utf-8")
+        self.assertIn('id="human-warning"', result_html)
+        self.assertIn("human-warning", result_js)
+
 
 class FrontendWorkflowTest(unittest.TestCase):
 
