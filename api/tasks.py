@@ -9,7 +9,6 @@ from db.models import Task
 from services.pdf_processor import extract_text_from_pdf
 from services.task_processor import process_document
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from services.auth import get_current_user
 from services.auth import get_current_user, require_admin
 
 security = HTTPBearer()
@@ -66,6 +65,7 @@ def get_tasks(
     current_user = get_current_user(
         credentials.credentials
     )
+
     tasks = db.query(Task).all()
 
     return [
@@ -255,10 +255,31 @@ def process_task(
 
 @router.get("/{task_id}")
 def get_task(
-    task_id: int,
+    task_id: str,
     db: Session = Depends(get_db)
 ):
-    task = db.query(Task).filter(Task.id == task_id).first()
+    # 1. Validate task ID format
+    if not task_id.startswith("TASK-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid task ID format"
+        )
+
+    # 2. Convert TASK-001 -> 1
+    try:
+        numeric_id = int(
+            task_id.replace("TASK-", "")
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid task ID format"
+        )
+
+    # 3. Find task in database
+    task = db.query(Task).filter(
+        Task.id == numeric_id
+    ).first()
 
     if not task:
         raise HTTPException(
@@ -266,6 +287,7 @@ def get_task(
             detail="Task not found"
         )
 
+    # 4. Return task
     return {
         "task_id": f"TASK-{task.id:03d}",
         "filename": task.filename,
@@ -282,7 +304,7 @@ def get_task(
 
 @router.put("/{task_id}")
 def update_task_status(
-    task_id: int,
+    task_id: str,
     status: str,
     db: Session = Depends(get_db),
     credentials: HTTPAuthorizationCredentials = Depends(security)
@@ -292,7 +314,27 @@ def update_task_status(
     )
 
     require_admin(current_user)
-    task = db.query(Task).filter(Task.id == task_id).first()
+
+    # Convert TASK-001 -> 1
+    if not task_id.startswith("TASK-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid task ID format"
+        )
+
+    try:
+        numeric_id = int(
+            task_id.replace("TASK-", "")
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid task ID format"
+        )
+
+    task = db.query(Task).filter(
+        Task.id == numeric_id
+    ).first()
 
     if not task:
         raise HTTPException(
