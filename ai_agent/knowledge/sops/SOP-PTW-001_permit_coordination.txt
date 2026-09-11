@@ -1,0 +1,2 @@
+SOP-PTW-001 — Permit-to-Work Coordination
+Before issuing or continuing a permit, the responsible issuer must consider existing active permits, equipment involved, isolation points, work locations, and overlapping time windows. Potential conflicts must be escalated for human safety review.

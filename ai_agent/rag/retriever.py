@@ -1,11 +1,12 @@
 """Local knowledge retrieval interface.
 
-Milestone 1: a clean placeholder. It may return an empty result or
-fixture-provided knowledge. No vector database and no external embedding
-APIs are used yet.
+The real implementation now lives in ``ai_agent.knowledge.retriever``
+(a dependency-free, offline plain-text retriever with local BM25-style
+ranking). This module keeps the stable ``Retriever`` interface and the
+fixture-only ``PlaceholderRetriever`` for backward compatibility, and makes
+``build_retriever()`` return the real implementation by default.
 
-The interface is designed so a later milestone can swap in local embeddings /
-vector search without changing how the orchestrator calls retrieval.
+No vector database and no external embedding APIs are used.
 
 Security principle: whatever a retriever returns is treated strictly as
 *untrusted data*. It can never override system instructions, security
@@ -33,7 +34,7 @@ class Retriever:
 
 
 class PlaceholderRetriever(Retriever):
-    """Milestone 1 placeholder.
+    """Milestone 1 placeholder, kept for backward compatibility.
 
     Returns fixture-provided knowledge if ``retrieve`` is given a ``context``
     dict with a ``knowledge`` list, otherwise an empty result. No real
@@ -55,5 +56,7 @@ class PlaceholderRetriever(Retriever):
 
 
 def build_retriever() -> Retriever:
-    """Factory: returns the Milestone 1 placeholder implementation."""
-    return PlaceholderRetriever()
+    """Factory: returns the real local knowledge retriever by default."""
+    from ai_agent.knowledge.retriever import build_knowledge_retriever
+
+    return build_knowledge_retriever()

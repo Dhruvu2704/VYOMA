@@ -92,6 +92,11 @@ def _persist_result(db, task: Task, result: Dict[str, Any]) -> None:
             ),
             "explanation": final_verdict.get("explanation"),
             "generated_at": final_verdict.get("generated_at"),
+            "retrieved_context": [
+                dict(item)
+                for item in (result.get("retrieved_context") or [])
+                if isinstance(item, dict)
+            ],
         }
     )
 

@@ -12,6 +12,10 @@ from ai_agent.agent_state import (
     ExecutionTraceEntry,
     StageError,
 )
+from ai_agent.knowledge.retriever import (
+    KnowledgeRetriever,
+    build_knowledge_retriever,
+)
 from ai_agent.orchestrator.orchestrator import AgentOrchestrator, OrchestratorError
 from ai_agent.planner import TaskAwarePlanner
 from ai_agent.rag.retriever import PlaceholderRetriever, Retriever, build_retriever
@@ -41,6 +45,7 @@ __all__ = [
     "AgentState",
     "DeterministicReasoningEngine",
     "ExecutionTraceEntry",
+    "KnowledgeRetriever",
     "ModelProvider",
     "ModelResponse",
     "ModelRouter",
@@ -62,6 +67,7 @@ __all__ = [
     "VALID_TASK_TYPES",
     "VerificationEngine",
     "build_retriever",
+    "build_knowledge_retriever",
     "build_router",
 ]
 

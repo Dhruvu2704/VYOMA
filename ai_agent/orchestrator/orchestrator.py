@@ -108,6 +108,15 @@ class AgentOrchestrator:
         self.classifier = classifier or TaskClassifier()
         self.planner = planner or TaskAwarePlanner(router=self.router)
         self.tools: ToolRegistry = tool_registry or ToolRegistry()
+        # Wire the retrieval backend into the formerly-conceptual
+        # ``search_knowledge`` tool: it now performs the same local, offline
+        # retrieval as the RETRIEVE stage. Unknown tools still stay rejected.
+        self.tools.register(
+            "search_knowledge",
+            lambda query="", *, permit_id=None: self.retriever.retrieve(
+                query, permit_id=permit_id
+            ),
+        )
         # Role 3 integration is opt-in: when a plant-safety evaluator is wired
         # in, the USE TOOL stage derives the authoritative GraphFacts and
         # RuleVerdict from the structured PTW + P&ID evidence. Without it the
@@ -239,7 +248,20 @@ class AgentOrchestrator:
                 f"Unknown/unregistered tool {tool_name!r}; tool rejected.",
             )
         try:
-            self.tools.handle(tool_name, permit_id=state.permit_id)
+            if tool_name == "search_knowledge":
+                query = ""
+                if state.structured_ptw is not None:
+                    query = (
+                        f"{state.structured_ptw.get('work_type') or ''} "
+                        f"{state.structured_ptw.get('scope') or ''}"
+                    ).strip()
+                else:
+                    query = state.permit_id or ""
+                tool_result = self.tools.handle(
+                    tool_name, query=query, permit_id=state.permit_id
+                )
+            else:
+                tool_result = self.tools.handle(tool_name, permit_id=state.permit_id)
         except ToolRegistryError:
             # Registered-but-not-implemented is a documented Milestone 1
             # limitation.  Recorded as a non-fatal note (NOT an error): the
@@ -254,6 +276,9 @@ class AgentOrchestrator:
                     timestamp=_utc_now(),
                 )
             )
+        else:
+            if tool_name == "search_knowledge" and isinstance(tool_result, list):
+                state.rag_context = _merge_knowledge(state.rag_context, tool_result)
         return state
 
     def _run_plant_safety(self, state: AgentState) -> AgentState:
@@ -526,6 +551,9 @@ class AgentOrchestrator:
         result["errors"] = [dict(e) for e in state.errors]
         result["execution_trace"] = list(state.execution_trace)
         result["failed_stage"] = state.failed_stage
+        # Surface the retrieved knowledge context on the result so callers can
+        # trace which local SOP snippets informed the reasoning context.
+        result["retrieved_context"] = list(state.rag_context or [])
         return result
 
 
@@ -537,6 +565,21 @@ class AgentOrchestrator:
 def _empty_plan() -> List[PlanStep]:
     return [PlanStep(step=s, tool=None, model_category=None, status="planned")
             for s in AgentOrchestrator.PIPELINE_STAGES]
+
+
+def _merge_knowledge(
+    base: List[Dict[str, Any]], extra: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Merge retrieved knowledge chunks, de-duplicating by (source, snippet)."""
+    seen = {(item.get("source"), item.get("snippet")) for item in base}
+    merged = list(base)
+    for chunk in extra:
+        key = (chunk.get("source"), chunk.get("snippet"))
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(chunk)
+    return merged
 
 
 def _reasoning_provider_name(engine: object) -> str:
