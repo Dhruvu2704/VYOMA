@@ -21,6 +21,10 @@ DATABASE_URL = os.getenv("VYOMA_DB_URL", "sqlite:///./vyoma.db")
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 UPLOAD_DIR = os.getenv("VYOMA_UPLOAD_DIR", "uploads")
 OUTPUT_DIR = os.getenv("VYOMA_OUTPUT_DIR", "outputs")
+FRONTEND_DIR = os.getenv(
+    "VYOMA_FRONTEND_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend"),
+)
 
 
 def cors_origins() -> list[str]:

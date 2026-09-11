@@ -21,6 +21,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -95,6 +96,22 @@ def _serialize_task(db: Session, task: Task) -> Dict[str, Any]:
         "result": result,
         "deliverables": _deliverables(db, task.id),
     }
+
+
+@router.get("")
+def list_tasks(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_user),
+):
+    """Recent tasks for the frontend dashboard (newest first)."""
+    tasks = (
+        db.query(Task)
+        .order_by(Task.id.desc())
+        .limit(min(max(limit, 1), 100))
+        .all()
+    )
+    return [_serialize_task(db, task) for task in tasks]
 
 
 def _validate_envelope(data: Any) -> None:
@@ -231,3 +248,43 @@ def get_task_deliverables(
         "task_id": f"TASK-{task.id:03d}",
         "deliverables": _deliverables(db, task.id),
     }
+
+
+@router.get("/{task_id}/deliverables/{filename}")
+def download_deliverable(
+    task_id: str,
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_user),
+):
+    """Download a stored deliverable for a task.
+
+    The file is located through the persisted deliverable row so the
+    filename parameter can never be used for path traversal.
+    """
+    try:
+        numeric_id = _resolve_task_id(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid task ID format") from exc
+
+    row = (
+        db.query(Deliverable)
+        .filter(Deliverable.task_id == numeric_id)
+        .filter(Deliverable.filename == filename)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Deliverable not found")
+
+    path = Path(row.file_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Deliverable file is missing")
+
+    media_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if path.suffix.lower() == ".docx"
+        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if path.suffix.lower() == ".xlsx"
+        else "application/octet-stream"
+    )
+    return FileResponse(str(path), filename=row.filename, media_type=media_type)

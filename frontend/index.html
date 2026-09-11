@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VYOMA // KAVACH - Safety Operations Dashboard</title>
+    <link rel="stylesheet" href="css/industrial.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">VYOMA<span class="accent"> // </span>KAVACH</div>
+        <nav class="nav">
+            <a href="index.html">Dashboard</a>
+            <a href="analysis.html">PTW Analysis</a>
+            <a href="audit.html">Audit</a>
+        </nav>
+        <div class="auth-status" id="auth-status"></div>
+    </header>
+
+    <main class="wrap">
+        <h1 class="page-title">Safety Operations Dashboard</h1>
+        <p class="page-sub">Plant-wide permit-to-work supervision through the local KAVACH AgentOrchestrator.</p>
+
+        <section class="panel">
+            <div class="sec-label">System Status</div>
+            <div id="health-status" class="kv"><span class="k">API STATUS</span><span class="v"><span class="badge st-idle">CHECKING</span></span></div>
+            <div class="kv"><span class="k">POLICY PIPELINE</span><span class="v">KAVACH AgentOrchestrator (deterministic rules + local reasoning + verification)</span></div>
+            <div class="kv"><span class="k">REASONING HOST</span><span class="v">Local Ollama instance (no cloud inference)</span></div>
+        </section>
+
+        <section class="grid2">
+            <section class="panel">
+                <div class="sec-label">Access</div>
+                <p class="muted" style="margin-bottom:12px">Login or register to run a safety analysis. Registration creates a standard (USER) role account.</p>
+                <div id="auth-error" class="ex ex-error hidden"></div>
+                <form id="login-form" class="form-row">
+                    <label class="field" for="login-username">Username</label>
+                    <input type="text" id="login-username" autocomplete="username" required>
+                    <label class="field" for="login-password">Password</label>
+                    <input type="password" id="login-password" autocomplete="current-password" required>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+                <form id="register-form" class="form-row">
+                    <label class="field" for="register-username">New Username</label>
+                    <input type="text" id="register-username" autocomplete="username" required>
+                    <label class="field" for="register-password">New Password</label>
+                    <input type="password" id="register-password" autocomplete="new-password" required>
+                    <button type="submit" class="btn">Register</button>
+                </form>
+                <p style="margin-top:6px"><a href="analysis.html">Begin safety analysis &rarr;</a></p>
+            </section>
+
+            <section class="panel" style="align-self:start">
+                <div class="sec-label">Active Policy Flow</div>
+                <ol class="rule-list" style="margin-left:18px">
+                    <li>Upload a PTW / contract envelope</li>
+                    <li>Backend queues task (CREATED)</li>
+                    <li>AgentOrchestrator runs plant safety + reasoning (PROCESSING)</li>
+                    <li>Verification reconciles deterministic and model results</li>
+                    <li>Final decision recorded with audit reference</li>
+                    <li>Deliverables generated and linked</li>
+                </ol>
+            </section>
+        </section>
+
+        <section class="panel">
+            <div class="sec-label">Recent Tasks</div>
+            <table class="data">
+                <thead>
+                    <tr><th>Task</th><th>Permit</th><th>Scenario</th><th>Status</th><th>Decision</th></tr>
+                </thead>
+                <tbody id="task-list">
+                    <tr><td colspan="5"><span class="muted">Log in to view recent tasks.</span></td></tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="js/render.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

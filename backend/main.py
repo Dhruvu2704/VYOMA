@@ -9,8 +9,10 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
-from backend.config import cors_origins
+from backend.config import FRONTEND_DIR, cors_origins
 
 
 def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -53,6 +55,14 @@ def create_app() -> FastAPI:
     app.include_router(audit.router)
 
     app.state.kavach_connector = KavachConnector()
+
+    frontend_dir = Path(FRONTEND_DIR)
+    if frontend_dir.is_dir():
+        app.mount(
+            "/",
+            StaticFiles(directory=str(frontend_dir), html=True),
+            name="frontend",
+        )
 
     return app
 

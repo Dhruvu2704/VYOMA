@@ -1,0 +1,94 @@
+{
+  "scenario": "conflict",
+  "description": "Synthetic MockRefinery conflict case. Intended outcome: FLAGGED / FLAGGED / AGREE / FLAGGED_FOR_REVIEW / human review.",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0002-CONF",
+    "task_type": "ptw_review",
+    "document_refs": ["mock:ptw/conflict_0002.json"],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0002-CONF",
+    "work_type": "hot-work",
+    "scope": "Grinding on the flange of line LF-204 near the solvent tank.",
+    "location": ["Unit-3", "Solvent-Bay"],
+    "start_time": "2026-09-06T09:00:00Z",
+    "end_time": "2026-09-06T13:00:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/conflict_0002.json",
+    "equipment_tags": ["LF-204", "T-302", "V-101"],
+    "isolation_points": ["ISO-T302-01"],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.95,
+      "scope": 0.93,
+      "equipment_tags": 0.9,
+      "isolation_points": 0.88
+    },
+    "low_confidence_fields": []
+  },
+  "structured_pid": {
+    "pid_id": "PID-CONF-0002",
+    "source": "mock:pid/conflict_0002.dwg",
+    "equipment_tags": ["LF-204", "T-302", "V-101"],
+    "symbols": [
+      {
+        "symbol_id": "LF-204",
+        "symbol_type": "LINE",
+        "properties": {"line_class": "solvent", "tag_resolved": true},
+        "connections": ["T-302"]
+      },
+      {
+        "symbol_id": "T-302",
+        "symbol_type": "STORAGE_TANK",
+        "properties": {"service": "solvent", "tag_resolved": true},
+        "connections": ["LF-204", "V-101"]
+      },
+      {
+        "symbol_id": "V-101",
+        "symbol_type": "VALVE",
+        "properties": {"tag_resolved": true},
+        "connections": ["T-302"]
+      }
+    ],
+    "connections": [
+      {"source": "LF-204", "target": "T-302", "line_ref": "LF-204"},
+      {"source": "T-302", "target": "V-101", "line_ref": "V-101"}
+    ],
+    "unresolved_symbols": [],
+    "field_confidence": {
+      "equipment_tags": 0.94,
+      "symbols": 0.92,
+      "connections": 0.9,
+      "unresolved_symbols": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "graph_facts": {
+    "permit_id": "MR-0002-CONF",
+    "resolved_nodes": ["LF-204", "T-302", "V-101"],
+    "unresolved_tags": [],
+    "connected_equipment": {
+      "LF-204": ["T-302"],
+      "T-302": ["V-101"]
+    },
+    "active_isolations": ["ISO-T302-01"],
+    "overlap_check": {
+      "overlapping_permits": ["MR-0003-CONF"],
+      "same_area_active": true
+    }
+  },
+  "rule_verdict": {
+    "permit_id": "MR-0002-CONF",
+    "conflicting_permit_ids": ["MR-0003-CONF"],
+    "rules_triggered": ["permit-conflict", "hot-work-overlap"],
+    "rule_result": "FLAGGED",
+    "explanation": "Hot work overlaps in the same area as another active permit and conflicts with an active isolation.",
+    "confidence": "HIGH"
+  },
+  "expected_llm_result": "FLAGGED",
+  "expected_agreement": "AGREE",
+  "expected_final_decision": "FLAGGED_FOR_REVIEW",
+  "expected_human_review": true
+}
