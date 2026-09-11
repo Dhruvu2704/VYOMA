@@ -245,6 +245,35 @@ export async function downloadDeliverable(taskId: string, filename: string): Pro
 }
 
 // ---------------------------------------------------------------------------
+// Workbench (public, read-only system introspection)
+// ---------------------------------------------------------------------------
+
+export interface WorkbenchStatus {
+  application: { name: string; components: string[] }
+  orchestrator: {
+    stages: string[]
+    reasoning_provider: string
+    provider_base_url: string
+    provider_timeout_s: number
+  }
+  ollama: {
+    status: 'online' | 'unreachable'
+    base_url: string
+    model_count: number
+    models: string[]
+    detail: string | null
+  }
+  tools: {
+    registered: string[]
+    deliverable_generators: { name: string; file_type: string; purpose: string }[]
+  }
+}
+
+export async function getWorkbenchStatus(): Promise<WorkbenchStatus> {
+  return unwrap<WorkbenchStatus>(await fetch(`${API_BASE_URL}/api/workbench/status`))
+}
+
+// ---------------------------------------------------------------------------
 // Review (client-side only — no backend review endpoint exists)
 // ---------------------------------------------------------------------------
 

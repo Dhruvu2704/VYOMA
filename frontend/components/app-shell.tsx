@@ -13,6 +13,7 @@ import {
   ShieldHalf,
   ScrollText,
   FileDown,
+  Settings,
   PanelLeftClose,
   PanelLeft,
   Bell,
@@ -36,6 +37,7 @@ const nav = [
   { href: '/annotated', label: 'Annotated P&ID', icon: Map },
   { href: '/security', label: 'Security', icon: ShieldHalf },
   { href: '/audit', label: 'Audit Trail', icon: ScrollText },
+  { href: '/workbench', label: 'Workbench', icon: Settings },
   { href: '/deliverables', label: 'Deliverables', icon: FileDown },
 ]
 
@@ -47,6 +49,7 @@ const sectionTitles: Record<string, string> = {
   '/annotated': 'Annotated P&ID',
   '/security': 'Zero-Egress Security',
   '/audit': 'Audit Trail',
+  '/workbench': 'Workbench',
   '/deliverables': 'Deliverables',
 }
 

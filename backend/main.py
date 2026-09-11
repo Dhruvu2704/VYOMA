@@ -28,7 +28,7 @@ def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
 def create_app() -> FastAPI:
     from backend.db.database import Base, engine
     from backend.db import models  # noqa: F401
-    from backend.api import audit, auth, health, permits, tasks
+    from backend.api import audit, auth, health, permits, tasks, workbench
     from backend.services.kavach import KavachConnector
 
     Base.metadata.create_all(bind=engine)
@@ -53,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks.router)
     app.include_router(permits.router)
     app.include_router(audit.router)
+    app.include_router(workbench.router)
 
     app.state.kavach_connector = KavachConnector()
 

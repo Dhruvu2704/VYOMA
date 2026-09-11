@@ -80,6 +80,73 @@ class OllamaModelError(_OllamaError):
 # (http_status, body_bytes). Raising is allowed and handled by the provider.
 HTTPTransport = Callable[[str, bytes, Dict[str, str], float], Tuple[int, bytes]]
 
+# Local Ollama status-probe timeout: checks reachability only, unlike
+# full-context inference which uses the configured (larger) timeout.
+_LOCAL_MODELS_TIMEOUT_S = 3.0
+
+# A GET transport for the read-only model-list probe.
+ModelsGetTransport = Callable[[str, float], Tuple[int, bytes]]
+
+
+def _default_get_models(url: str, timeout: float) -> Tuple[int, bytes]:
+    """Standard-library GET client for ``list_local_models``."""
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed configured local endpoint
+            return response.status, response.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+
+
+def list_local_models(
+    config: Optional[OllamaConfig] = None,
+    *,
+    transport: Optional[ModelsGetTransport] = None,
+) -> Dict[str, Any]:
+    """Best-effort, read-only listing of models installed on local Ollama.
+
+    Returns ``{"status": "online", "models": [...], "detail": None}`` on a
+    successful probe and ``{"status": "unreachable", "models": [],
+    "detail": ...}`` on any failure. Never raises and never fabricates model
+    names. ``transport`` is injectable for tests; it defaults to a local-only
+    standard-library client.
+    """
+    cfg = config or load_ollama_config()
+    url = f"{cfg.base_url.rstrip('/')}/api/tags"
+    do_get = transport or _default_get_models
+    try:
+        status, body = do_get(url, _LOCAL_MODELS_TIMEOUT_S)
+    except Exception as exc:  # noqa: BLE001 - any failure means unreachable
+        return {
+            "status": "unreachable",
+            "models": [],
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
+    if status != 200:
+        return {
+            "status": "unreachable",
+            "models": [],
+            "detail": f"Ollama responded with HTTP {status}",
+        }
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        return {
+            "status": "unreachable",
+            "models": [],
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
+
+    names: List[str] = []
+    entries = payload.get("models") if isinstance(payload, dict) else None
+    if isinstance(entries, list):
+        for entry in entries:
+            name = entry.get("name") if isinstance(entry, dict) else None
+            if name:
+                names.append(str(name))
+    return {"status": "online", "models": sorted(names), "detail": None}
+
 
 def _default_transport(
     url: str, data: bytes, headers: Dict[str, str], timeout: float

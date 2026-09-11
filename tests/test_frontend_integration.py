@@ -333,6 +333,55 @@ class FrontendWorkflowTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
 
 
+class WorkbenchStatusTest(unittest.TestCase):
+    """Read-only workbench introspection endpoint (public, no auth)."""
+
+    def setUp(self):
+        self.client = TestClient(create_app())
+
+    def test_workbench_status_reports_live_stack(self):
+        resp = self.client.get("/api/workbench/status")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+
+        self.assertEqual(body["application"]["name"], "VYOMA")
+        self.assertIn("KAVACH", body["application"]["components"])
+
+        self.assertEqual(
+            body["orchestrator"]["stages"],
+            AgentOrchestrator.PIPELINE_STAGES,
+        )
+        self.assertTrue(body["orchestrator"]["reasoning_provider"].startswith("ollama:"))
+
+        self.assertIn(body["ollama"]["status"], ("online", "unreachable"))
+        self.assertEqual(body["ollama"]["model_count"], len(body["ollama"]["models"]))
+
+        self.assertIn("check_conflict", body["tools"]["registered"])
+        generators = {g["name"] for g in body["tools"]["deliverable_generators"]}
+        self.assertEqual(generators, {"word", "excel", "pdf", "audit"})
+        types = {g["file_type"] for g in body["tools"]["deliverable_generators"]}
+        self.assertIn("WORD_MEMO", types)
+        self.assertIn("EXCEL_CONFLICT_MATRIX", types)
+        self.assertIn("ANNOTATED_PDF", types)
+
+    def test_workbench_status_graceful_when_ollama_unreachable(self):
+        original = os.environ.get("VYOMA_OLLAMA_BASE_URL")
+        os.environ["VYOMA_OLLAMA_BASE_URL"] = "http://127.0.0.1:1"
+        try:
+            resp = self.client.get("/api/workbench/status")
+        finally:
+            if original is None:
+                os.environ.pop("VYOMA_OLLAMA_BASE_URL", None)
+            else:
+                os.environ["VYOMA_OLLAMA_BASE_URL"] = original
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["ollama"]["status"], "unreachable")
+        self.assertEqual(body["ollama"]["models"], [])
+        self.assertEqual(body["ollama"]["model_count"], 0)
+
+
 @unittest.skipUnless(
     subprocess.run(["node", "--version"], capture_output=True).returncode == 0,
     "node.js is not available",
