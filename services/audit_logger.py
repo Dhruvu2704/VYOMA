@@ -29,27 +29,23 @@ class AuditLogger:
 
         return event
 
-
     def save_event(
         self,
         db: Session,
         event: AuditEvent
     ):
 
-        # Get the most recent audit event
         previous_event = (
             db.query(AuditLog)
             .order_by(AuditLog.id.desc())
             .first()
         )
 
-        # First event starts the chain
         if previous_event:
             previous_hash = previous_event.event_hash
         else:
             previous_hash = "GENESIS"
 
-        # Create data to hash
         data = (
             event.audit_ref
             + event.permit_id
@@ -60,12 +56,10 @@ class AuditLogger:
             + previous_hash
         )
 
-        # Generate SHA-256 hash
         event_hash = hashlib.sha256(
             data.encode()
         ).hexdigest()
 
-        # Create database record
         audit_log = AuditLog(
             audit_ref=event.audit_ref,
             permit_id=event.permit_id,
@@ -78,30 +72,23 @@ class AuditLogger:
         )
 
         db.add(audit_log)
-
         db.commit()
-
         db.refresh(audit_log)
 
         return audit_log
 
-
     def verify_chain(self, db: Session):
 
-        # Get all audit events in order
         logs = (
             db.query(AuditLog)
             .order_by(AuditLog.id.asc())
             .all()
         )
 
-        # The first event must start from GENESIS
         previous_hash = "GENESIS"
 
-        # Check every event
         for log in logs:
 
-            # Recreate the original data
             data = (
                 log.audit_ref
                 + log.permit_id
@@ -112,20 +99,16 @@ class AuditLogger:
                 + previous_hash
             )
 
-            # Calculate the hash again
             calculated_hash = hashlib.sha256(
                 data.encode()
             ).hexdigest()
 
-            # Check previous hash
             if log.previous_hash != previous_hash:
                 return False
 
-            # Check event hash
             if log.event_hash != calculated_hash:
                 return False
 
-            # Move to the next event
             previous_hash = log.event_hash
 
         return True

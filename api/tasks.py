@@ -187,6 +187,135 @@ async def upload_file(
         "status": task.status,
         "message": "File uploaded successfully"
     }
+    # =========================
+# UPLOAD P&ID
+# =========================
+
+@router.post("/{task_id}/pid")
+async def upload_pid(
+    task_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Validate task ID format
+    if not task_id.startswith("TASK-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid task ID format"
+        )
+
+    try:
+        numeric_id = int(
+            task_id.replace("TASK-", "")
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid task ID format"
+        )
+
+    # 2. Find task
+    task = db.query(Task).filter(
+        Task.id == numeric_id
+    ).first()
+
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found"
+        )
+
+    # 3. Check filename
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Filename is required"
+        )
+
+    # 4. Check extension
+    extension = Path(file.filename).suffix.lower()
+
+    if extension != ".pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are allowed"
+        )
+
+    # 5. Check MIME type
+    if file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid PDF content type"
+        )
+
+    # 6. Create uploads directory
+    UPLOAD_DIR.mkdir(exist_ok=True)
+
+    # 7. Generate safe server-side filename
+    safe_filename = f"{uuid.uuid4().hex}_pid.pdf"
+
+    file_path = UPLOAD_DIR / safe_filename
+
+    # 8. Save file with size limit
+    size = 0
+
+    try:
+        with open(file_path, "wb") as buffer:
+
+            while chunk := await file.read(1024 * 1024):
+
+                size += len(chunk)
+
+                if size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="File too large. Maximum size is 10 MB"
+                    )
+
+                buffer.write(chunk)
+
+    except HTTPException:
+        file_path.unlink(missing_ok=True)
+        raise
+
+    # 9. Check that PDF can be read
+    try:
+        extracted_text = extract_text_from_pdf(
+            str(file_path)
+        )
+
+        if not extracted_text.strip():
+            file_path.unlink(missing_ok=True)
+
+            raise HTTPException(
+                status_code=400,
+                detail="No readable text found in P&ID PDF"
+            )
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        file_path.unlink(missing_ok=True)
+
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read P&ID PDF file"
+        )
+
+    # 10. Save P&ID path to task
+    task.pid_file_path = str(file_path)
+
+    db.commit()
+    db.refresh(task)
+
+    # 11. Return response
+    return {
+        "task_id": f"TASK-{task.id:03d}",
+        "filename": file.filename,
+        "status": task.status,
+        "message": "P&ID uploaded successfully"
+    }
 
 
 # =========================

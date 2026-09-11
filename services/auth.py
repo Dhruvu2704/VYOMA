@@ -2,27 +2,22 @@ import os
 
 from datetime import datetime, timedelta, timezone
 
+from dotenv import load_dotenv
 from fastapi import HTTPException
 from jose import jwt, JWTError
 
 
-# =========================
-# JWT CONFIGURATION
-# =========================
+load_dotenv()
 
-SECRET_KEY = os.getenv(
-    "VYOMA_SECRET_KEY",
-    "development-secret-change-this"
-)
+SECRET_KEY = os.getenv("VYOMA_SECRET_KEY")
+
+if not SECRET_KEY:
+    raise RuntimeError("VYOMA_SECRET_KEY is not configured")
 
 ALGORITHM = "HS256"
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-
-# =========================
-# CREATE JWT TOKEN
-# =========================
 
 def create_access_token(
     user_id: int,
@@ -50,10 +45,6 @@ def create_access_token(
     return token
 
 
-# =========================
-# VERIFY JWT TOKEN
-# =========================
-
 def verify_access_token(token: str):
 
     try:
@@ -74,10 +65,6 @@ def verify_access_token(token: str):
         )
 
 
-# =========================
-# GET CURRENT USER
-# =========================
-
 def get_current_user(token: str):
 
     payload = verify_access_token(token)
@@ -93,16 +80,20 @@ def get_current_user(token: str):
             detail="Invalid authentication token"
         )
 
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token"
+        )
+
     return {
-        "user_id": int(user_id),
+        "user_id": user_id,
         "username": username,
         "role": role
     }
 
-
-# =========================
-# ROLE CHECK
-# =========================
 
 def require_role(
     current_user: dict,
@@ -119,13 +110,10 @@ def require_role(
     return current_user
 
 
-# =========================
-# ADMIN CHECK
-# =========================
-
 def require_admin(current_user: dict):
 
     return require_role(
         current_user,
         ["ADMIN"]
     )
+

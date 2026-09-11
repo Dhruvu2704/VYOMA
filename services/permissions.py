@@ -1,14 +1,15 @@
 from fastapi import HTTPException
 
 
-# =========================
-# TOOL PERMISSIONS
-# =========================
-
 TOOL_PERMISSIONS = {
 
     "view_permits": [
         "USER",
+        "SAFETY_OFFICER",
+        "ADMIN"
+    ],
+
+    "create_permit": [
         "SAFETY_OFFICER",
         "ADMIN"
     ],
@@ -34,15 +35,16 @@ TOOL_PERMISSIONS = {
         "ADMIN"
     ],
 
+    "create_audit_log": [
+        "SAFETY_OFFICER",
+        "ADMIN"
+    ],
+
     "manage_users": [
         "ADMIN"
     ]
 }
 
-
-# =========================
-# CHECK TOOL PERMISSION
-# =========================
 
 def require_tool_permission(
     current_user: dict,
@@ -50,7 +52,6 @@ def require_tool_permission(
 ):
 
     if tool_name not in TOOL_PERMISSIONS:
-
         raise HTTPException(
             status_code=403,
             detail="Unknown tool"
@@ -59,7 +60,6 @@ def require_tool_permission(
     allowed_roles = TOOL_PERMISSIONS[tool_name]
 
     if current_user["role"] not in allowed_roles:
-
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to use this tool"

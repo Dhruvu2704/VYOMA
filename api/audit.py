@@ -1,23 +1,18 @@
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-from services.auth import get_current_user
-from services.permissions import require_tool_permission
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from db.database import get_db
 from db.models import AuditLog
-from services.audit_logger import AuditLogger
-
+from audit.logger import AuditLogger
+from services.auth import get_current_user
+from services.permissions import require_tool_permission
 
 
 router = APIRouter(
     prefix="/api/audit",
     tags=["Audit"]
 )
-
-security = HTTPBearer()
 
 
 class AuditCreate(BaseModel):
@@ -27,19 +22,20 @@ class AuditCreate(BaseModel):
     sequence: int
 
 
-# =========================
-# CREATE AUDIT EVENT
-# =========================
-
 @router.post("/")
 def create_audit_event(
     audit_data: AuditCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+
+    require_tool_permission(
+        current_user,
+        "create_audit_log"
+    )
 
     logger = AuditLogger()
 
-    # Create audit event
     event = logger.create_event(
         permit_id=audit_data.permit_id,
         pipeline=audit_data.pipeline,
@@ -47,7 +43,6 @@ def create_audit_event(
         sequence=audit_data.sequence
     )
 
-    # Save event to database
     saved_event = logger.save_event(
         db,
         event
@@ -66,18 +61,11 @@ def create_audit_event(
     }
 
 
-# =========================
-# GET AUDIT HISTORY
-# =========================
-
 @router.get("/")
 def get_audit_events(
     db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    current_user=Depends(get_current_user)
 ):
-    current_user = get_current_user(
-        credentials.credentials
-    )
 
     require_tool_permission(
         current_user,
@@ -104,22 +92,25 @@ def get_audit_events(
         for log in logs
     ]
 
-    logs = (
-        db.query(AuditLog)
-        .order_by(AuditLog.id.asc())
-        .all()
+
+@router.get("/verify")
+def verify_audit_chain(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+
+    require_tool_permission(
+        current_user,
+        "view_audit_logs"
     )
 
-    return [
-        {
-            "audit_ref": log.audit_ref,
-            "permit_id": log.permit_id,
-            "timestamp": log.timestamp,
-            "pipeline": log.pipeline,
-            "stages": log.stages.split(","),
-            "sequence": log.sequence,
-            "previous_hash": log.previous_hash,
-            "event_hash": log.event_hash
-        }
-        for log in logs
-    ]
+    valid = AuditLogger().verify_chain(db)
+
+    return {
+        "valid": valid,
+        "message": (
+            "Audit hash chain is valid"
+            if valid
+            else "Audit hash chain verification failed"
+        )
+    }

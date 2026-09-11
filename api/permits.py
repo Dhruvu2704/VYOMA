@@ -5,6 +5,9 @@ from datetime import datetime
 
 from db.database import get_db
 from db.models import Permit
+from services.auth import get_current_user
+from services.permissions import require_tool_permission
+from audit.logger import AuditLogger
 
 
 router = APIRouter(
@@ -22,15 +25,17 @@ class PermitCreate(BaseModel):
     issued_by: int
 
 
-# =========================
-# CREATE PERMIT
-# =========================
-
 @router.post("/")
 def create_permit(
     permit_data: PermitCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+
+    require_tool_permission(
+        current_user,
+        "create_permit"
+    )
 
     existing_permit = db.query(Permit).filter(
         Permit.permit_id == permit_data.permit_id
@@ -56,19 +61,38 @@ def create_permit(
     db.commit()
     db.refresh(permit)
 
+    audit_logger = AuditLogger()
+
+    audit_event = audit_logger.create_event(
+        permit_id=permit.permit_id,
+        pipeline="PERMIT",
+        stages=["PERMIT_CREATED"],
+        sequence=permit.id
+    )
+
+    audit_logger.save_event(
+        db,
+        audit_event
+    )
+
     return {
         "message": "Permit created successfully",
         "permit_id": permit.permit_id,
         "status": permit.status
     }
-    # =========================
-# GET ACTIVE PERMITS
-# =========================
+
 
 @router.get("/active")
 def get_active_permits(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+
+    require_tool_permission(
+        current_user,
+        "view_permits"
+    )
+
     permits = db.query(Permit).filter(
         Permit.status == "ACTIVE"
     ).all()
@@ -85,16 +109,21 @@ def get_active_permits(
         }
         for permit in permits
     ]
-    # =========================
-# UPDATE PERMIT STATUS
-# =========================
+
 
 @router.put("/{permit_id}/status")
 def update_permit_status(
     permit_id: str,
     status: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
+
+    require_tool_permission(
+        current_user,
+        "close_permit"
+    )
+
     permit = db.query(Permit).filter(
         Permit.permit_id == permit_id
     ).first()
@@ -121,6 +150,20 @@ def update_permit_status(
 
     db.commit()
     db.refresh(permit)
+
+    audit_logger = AuditLogger()
+
+    audit_event = audit_logger.create_event(
+        permit_id=permit.permit_id,
+        pipeline="PERMIT",
+        stages=[f"PERMIT_STATUS_{status}"],
+        sequence=permit.id
+    )
+
+    audit_logger.save_event(
+        db,
+        audit_event
+    )
 
     return {
         "message": "Permit status updated successfully",

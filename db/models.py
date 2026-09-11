@@ -20,6 +20,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=True)
+    pid_file_path = Column(String, nullable=True)
     status = Column(String, nullable=False, default="CREATED")
     created_by = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -43,7 +44,7 @@ class Verdict(Base):
     __tablename__ = "verdicts"
 
     id = Column(Integer, primary_key=True, index=True)
-    task_id = Column(Integer, nullable=False)
+    permit_id = Column(String, nullable=False)
     final_verdict = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -52,7 +53,7 @@ class ReviewDecision(Base):
     __tablename__ = "review_decisions"
 
     id = Column(Integer, primary_key=True, index=True)
-    task_id = Column(Integer, nullable=False)
+    permit_id = Column(String, nullable=False)
     reviewer_id = Column(Integer, nullable=False)
     decision = Column(String, nullable=False)
     comment = Column(Text)
@@ -83,6 +84,7 @@ class Deliverable(Base):
     sha256 = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
@@ -93,13 +95,5 @@ class AuditLog(Base):
     pipeline = Column(String, nullable=False)
     stages = Column(String, nullable=False)
     sequence = Column(Integer, nullable=False)
-
     previous_hash = Column(String, nullable=True)
     event_hash = Column(String, nullable=False)
-class User(Base):
-    __tablename__ = "users"
-
-id = Column(Integer, primary_key=True, index=True)
-username = Column(String, unique=True, nullable=False)
-password_hash = Column(String, nullable=False)
-role = Column(String, nullable=False, default="USER")
