@@ -2,8 +2,9 @@
 //
 // Safety-affecting data (verdicts, tasks, audit, deliverables) is NEVER declared
 // here: it comes exclusively from the local backend API. The objects that remain
-// in this file are decorative only (annotated-drawing overlays and the zero-egress
-// security scene) and do not claim backend-reported facts.
+// in this file are decorative only (annotated-drawing overlays).
+// The former zero-egress security scene was removed: zero-egress is now a real
+// runtime measurement served by /api/workbench/security.
 
 export type SafetyResult = 'SAFE' | 'PASS' | 'FLAGGED' | 'REJECTED' | 'UNAVAILABLE'
 export type Agreement = 'AGREE' | 'DISAGREE' | 'UNAVAILABLE'
@@ -25,13 +26,6 @@ export interface ActivityEvent {
   time: string
   label: string
   kind: 'review' | 'verdict' | 'analysis' | 'upload' | 'security'
-}
-
-export interface SecurityEvent {
-  time: string
-  event: string
-  iface: string
-  status: 'BLOCKED' | 'VERIFIED'
 }
 
 export interface Annotation {
@@ -87,24 +81,4 @@ export const annotations: Annotation[] = [
     w: 16,
     h: 12,
   },
-]
-
-// Decorative zero-egress security scene (visual showcase; not backend data).
-export const securityStatus = {
-  zeroEgress: 'ACTIVE',
-  networkInterface: 'eth0',
-  externalEgress: 'BLOCKED',
-  packetMonitoring: 'ACTIVE',
-  securityPolicy: 'ENFORCED',
-  auditChain: 'HEALTHY',
-  interfaceState: 'UP',
-  externalConnections: 0,
-}
-
-export const securityEvents: SecurityEvent[] = [
-  { time: '12:01:47', event: 'External connection blocked', iface: 'eth0', status: 'BLOCKED' },
-  { time: '12:00:12', event: 'Packet inspection', iface: 'eth0', status: 'VERIFIED' },
-  { time: '11:59:58', event: 'External DNS query blocked', iface: 'eth0', status: 'BLOCKED' },
-  { time: '11:58:31', event: 'Local service handshake', iface: 'lo', status: 'VERIFIED' },
-  { time: '11:57:04', event: 'Egress policy re-validated', iface: 'eth0', status: 'VERIFIED' },
 ]

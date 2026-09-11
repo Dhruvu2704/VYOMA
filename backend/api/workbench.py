@@ -14,13 +14,18 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
 
 from ai_agent.config import OllamaConfig, load_ollama_config
 from ai_agent.orchestrator.orchestrator import AgentOrchestrator
 from ai_agent.router.model_router import ModelRouter, build_local_model_router
 from ai_agent.router.ollama_provider import list_local_models
 from ai_agent.tool_registry import CONCEPTUAL_TOOL_NAMES
+
+from backend.db.database import get_db
+from backend.services.audit_logger import AuditLogger
+from backend.services.egress_monitor import EgressMonitor, network_interface_summary
 
 router = APIRouter(prefix="/api/workbench", tags=["Workbench"])
 
@@ -99,4 +104,34 @@ def workbench_status() -> Dict[str, Any]:
             "registered": sorted(CONCEPTUAL_TOOL_NAMES),
             "deliverable_generators": DELIVERABLE_GENERATORS,
         },
+    }
+
+
+@router.get("/security")
+def workbench_security(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Live runtime egress evidence for this server process (public, read-only).
+
+    Every figure comes from a real psutil sampling of the running process's
+    connection table — never a static "0 KB sent" label. Localhost connections
+    (e.g. the local Ollama instance) are reported separately from any
+    external-destination connection.
+    """
+    monitor: EgressMonitor = request.app.state.egress_monitor
+    snapshot: Dict[str, Any] = monitor.snapshot()
+    return {
+        "method": "psutil live connection sampling",
+        "pid": snapshot["pid"],
+        "sampled_at": snapshot["sampled_at"],
+        "started_at": snapshot["started_at"],
+        "local_connections": snapshot["local_connections"],
+        "external_connections": snapshot["external_connections"],
+        "local_connection_count": snapshot["local_connection_count"],
+        "external_connection_count": snapshot["external_connection_count"],
+        "external_observed_since_start": snapshot["external_observed_since_start"],
+        "connect_error": snapshot["connect_error"],
+        "interfaces": network_interface_summary(),
+        "audit_chain": {"valid": AuditLogger().verify_chain(db)},
     }

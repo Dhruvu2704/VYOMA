@@ -278,6 +278,38 @@ export async function getWorkbenchStatus(): Promise<WorkbenchStatus> {
   return unwrap<WorkbenchStatus>(await fetch(`${API_BASE_URL}/api/workbench/status`))
 }
 
+export interface SecurityConnection {
+  laddr: { ip: string; port: number } | null
+  raddr: { ip: string; port: number } | null
+  status: string
+  family: string
+}
+
+export interface NetworkInterface {
+  name: string
+  is_up: boolean
+  addresses: { family: string; address: string }[]
+}
+
+export interface SecurityStatus {
+  method: string
+  pid: number
+  sampled_at: string
+  started_at: string
+  local_connections: SecurityConnection[]
+  external_connections: SecurityConnection[]
+  local_connection_count: number
+  external_connection_count: number
+  external_observed_since_start: number
+  connect_error: string | null
+  interfaces: NetworkInterface[]
+  audit_chain: { valid: boolean }
+}
+
+export async function getSecurityStatus(): Promise<SecurityStatus> {
+  return unwrap<SecurityStatus>(await fetch(`${API_BASE_URL}/api/workbench/security`))
+}
+
 // ---------------------------------------------------------------------------
 // Review (client-side only — no backend review endpoint exists)
 // ---------------------------------------------------------------------------

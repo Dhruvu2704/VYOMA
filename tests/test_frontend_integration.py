@@ -76,6 +76,15 @@ FORBIDDEN_CLOUD_TOKENS = (
 )
 SECRET_PATTERN = re.compile(r"sk-(?:proj|ant)-[A-Za-z0-9]{8,}")
 
+FABRICATED_EGRESS_CLAIM_TOKENS = (
+    "securityStatus",
+    "securityEvents",
+    "externalConnections",
+    "packetMonitoring",
+    "0 external",
+    "0 KB",
+)
+
 RESULT_CONTRACT_KEYS = (
     "final_decision",
     "rule_result",
@@ -155,6 +164,17 @@ class FrontendSourceTest(unittest.TestCase):
             for value in HARDCODED_RESULT_VALUES:
                 if value in content:
                     offenders.append(f"{path}:{value}")
+        self.assertEqual(offenders, [])
+
+    def test_no_fabricated_zero_egress_claims_in_ui(self):
+        # Zero-egress must come from the live /api/workbench/security payload,
+        # never from a static decorative scene or hardcoded label.
+        offenders = []
+        for path in _source_files():
+            content = path.read_text(encoding="utf-8")
+            for token in FABRICATED_EGRESS_CLAIM_TOKENS:
+                if token in content:
+                    offenders.append(f"{path}:{token}")
         self.assertEqual(offenders, [])
 
     def test_no_cloud_services_or_secrets_in_frontend(self):
@@ -382,6 +402,31 @@ class WorkbenchStatusTest(unittest.TestCase):
         self.assertEqual(body["ollama"]["status"], "unreachable")
         self.assertEqual(body["ollama"]["models"], [])
         self.assertEqual(body["ollama"]["model_count"], 0)
+
+    def test_workbench_security_reports_real_egress_evidence(self):
+        resp = self.client.get("/api/workbench/security")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+
+        self.assertIn("psutil", body["method"])
+        self.assertEqual(
+            body["external_connection_count"],
+            len(body["external_connections"]),
+        )
+        self.assertEqual(
+            body["local_connection_count"],
+            len(body["local_connections"]),
+        )
+        # The granting property: no external destination observed since start.
+        self.assertEqual(body["external_observed_since_start"], 0)
+        self.assertIsInstance(body["interfaces"], list)
+        self.assertIn("valid", body["audit_chain"])
+        self.assertIn("sampled_at", body)
+        for conn in body["external_connections"]:
+            self.assertIsNotNone(conn["raddr"])
+            ip = conn["raddr"]["ip"]
+            self.assertNotEqual(ip.split(".")[0], "127")
+            self.assertNotEqual(ip, "::1")
 
     def test_workbench_router_section_matches_model_router(self):
         resp = self.client.get("/api/workbench/status")

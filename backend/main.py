@@ -6,6 +6,8 @@ existing KAVACH AgentOrchestrator via :class:`KavachConnector`.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -29,14 +31,25 @@ def create_app() -> FastAPI:
     from backend.db.database import Base, engine
     from backend.db import models  # noqa: F401
     from backend.api import audit, auth, health, permits, tasks, workbench
+    from backend.services.egress_monitor import EgressMonitor
     from backend.services.kavach import KavachConnector
 
     Base.metadata.create_all(bind=engine)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        monitor: EgressMonitor = app.state.egress_monitor
+        monitor.start()
+        try:
+            yield
+        finally:
+            monitor.stop()
 
     app = FastAPI(
         title="VYOMA + KAVACH Backend",
         description="Backend and Security API",
         version="1.0.0",
+        lifespan=lifespan,
     )
 
     app.add_middleware(
@@ -56,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(workbench.router)
 
     app.state.kavach_connector = KavachConnector()
+    app.state.egress_monitor = EgressMonitor()
 
     frontend_dir = Path(FRONTEND_DIR)
     if frontend_dir.is_dir():
