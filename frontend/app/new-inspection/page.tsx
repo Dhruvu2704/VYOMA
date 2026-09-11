@@ -20,9 +20,10 @@ import { PageContainer, PageHeader } from '@/components/page-header'
 import { Panel, PanelHeader } from '@/components/panel'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/toast'
-import { createTask } from '@/lib/api'
+import { uploadTask } from '@/lib/api'
 
 interface FileState {
+  file: File
   name: string
   size: string
 }
@@ -52,7 +53,7 @@ function UploadZone({
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return
     const f = files[0]
-    onSelect({ name: f.name, size: `${(f.size / 1024 / 1024).toFixed(1)} MB` })
+    onSelect({ file: f, name: f.name, size: `${(f.size / 1024 / 1024).toFixed(1)} MB` })
   }
 
   return (
@@ -143,11 +144,35 @@ export default function NewInspectionPage() {
 
   const start = async () => {
     if (!ready) return
+
     setStarting(true)
-    toast.push({ kind: 'info', title: 'Analysis started', message: 'Verification pipeline initializing…' })
-    const { taskId } = await createTask()
-    toast.push({ kind: 'success', title: 'Task created', message: taskId })
-    router.push('/processing')
+
+    toast.push({
+      kind: 'info',
+      title: 'Analysis started',
+      message: 'Verification pipeline initializing…',
+    })
+
+    try {
+      const result = await uploadTask(ptw.file)
+
+      toast.push({
+        kind: 'success',
+        title: 'Task created',
+        message: result.task_id,
+      })
+
+      sessionStorage.setItem('vyoma_task_id', result.task_id)
+      router.push('/processing')
+    } catch (error) {
+      toast.push({
+        kind: 'error',
+        title: 'Upload failed',
+        message: error instanceof Error ? error.message : 'File upload failed',
+      })
+    } finally {
+      setStarting(false)
+    }
   }
 
   return (

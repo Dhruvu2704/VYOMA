@@ -19,6 +19,7 @@ import { PageContainer, PageHeader } from '@/components/page-header'
 import { Panel, PanelHeader } from '@/components/panel'
 import { StatusBadge } from '@/components/status-badge'
 import { cn } from '@/lib/utils'
+import { getTaskStatus } from '@/lib/api'
 
 const stages = [
   { id: 1, label: 'File Received', icon: FileCheck2 },
@@ -49,39 +50,69 @@ function useNow() {
 }
 
 export default function ProcessingPage() {
+  const [taskId, setTaskId] = useState('')
   const [progress, setProgress] = useState(8)
+  const [taskStatus, setTaskStatus] = useState('CREATED')
   const [log, setLog] = useState<{ time: string; msg: string }[]>([])
   const logRef = useRef<HTMLDivElement>(null)
   useNow()
 
   useEffect(() => {
-    const t = setInterval(() => {
-      setProgress((p) => (p >= 100 ? 100 : Math.min(100, p + Math.random() * 6 + 2)))
-    }, 700)
-    return () => clearInterval(t)
+    const savedTaskId = sessionStorage.getItem('vyoma_task_id')
+    if (savedTaskId) {
+      setTaskId(savedTaskId)
+    }
   }, [])
 
   useEffect(() => {
-    let i = 0
-    const stamp = () => {
-      const d = new Date()
-      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+    const taskId = sessionStorage.getItem('vyoma_task_id')
+
+    if (!taskId) {
+      return
     }
-    const t = setInterval(() => {
-      if (i < logLines.length) {
-        const line = logLines[i]
-        setLog((prev) => [...prev, { time: stamp(), msg: line }])
-        i++
+
+    let active = true
+
+    const pollStatus = async () => {
+      try {
+        const task = await getTaskStatus(taskId)
+
+        if (!active) return
+
+        setTaskStatus(task.status)
+
+        if (task.status === 'CREATED') {
+          setProgress(10)
+        } else if (task.status === 'PROCESSING') {
+          setProgress((p) => Math.min(90, Math.max(p, 50)))
+        } else if (task.status === 'COMPLETED') {
+          setProgress(100)
+          active = false
+        } else if (task.status === 'FAILED') {
+          setProgress(0)
+          active = false
+        }
+      } catch (error) {
+        console.error('Failed to fetch task status:', error)
       }
-    }, 1400)
-    return () => clearInterval(t)
+    }
+
+    pollStatus()
+
+    const t = setInterval(pollStatus, 2000)
+
+    return () => {
+      active = false
+      clearInterval(t)
+    }
   }, [])
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [log])
 
-  const done = progress >= 100
+  const done = taskStatus === 'COMPLETED'
+  const failed = taskStatus === 'FAILED'
   const activeStage = Math.min(6, Math.floor((progress / 100) * 6) + (done ? 0 : 1))
 
   const stageStatus = (id: number): 'complete' | 'processing' | 'waiting' => {
@@ -102,8 +133,11 @@ export default function ProcessingPage() {
         action={
           <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 font-mono text-xs">
             <span className="text-muted-foreground">Task</span>
-            <span className="text-foreground">task-2026-0512</span>
-            <StatusBadge value={done ? 'VERIFIED' : 'PROCESSING'} size="sm" />
+            <span className="text-foreground">{taskId || 'Loading...'}</span>
+            <StatusBadge
+              value={failed ? 'FAILED' : done ? 'VERIFIED' : 'PROCESSING'}
+              size="sm"
+            />
           </div>
         }
       />

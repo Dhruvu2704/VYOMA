@@ -8,7 +8,7 @@ import { Link2, FileCheck, ShieldCheck, Download } from 'lucide-react'
 import { useToast } from '@/components/toast'
 
 export default function AuditPage() {
-  const { toast } = useToast()
+  const { push } = useToast()
 
   return (
     <PageContainer>
@@ -17,7 +17,13 @@ export default function AuditPage() {
         subtitle="Tamper-evident hash chain of every action in the inspection lifecycle"
         action={
           <button
-            onClick={() => toast('Audit log exported — audit-2026-0512.json', 'success')}
+            onClick={() =>
+              push({
+                kind: 'success',
+                title: 'Audit log exported',
+                message: 'audit-2026-0512.json',
+              })
+            }
             className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card-elevated"
           >
             <Download className="size-4" />
