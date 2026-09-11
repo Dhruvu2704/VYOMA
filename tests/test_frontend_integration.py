@@ -96,6 +96,7 @@ RESULT_CONTRACT_KEYS = (
     "requires_human_review",
     "explanation",
     "execution_trace",
+    "retrieved_context",
 )
 
 
@@ -157,6 +158,8 @@ class FrontendSourceTest(unittest.TestCase):
             "requires_human_review",
             "execution_trace",
             "step.stage",
+            "retrieved_context",
+            "snippet",
         ):
             self.assertIn(key, src)
 
@@ -191,6 +194,39 @@ class FrontendSourceTest(unittest.TestCase):
             self.assertNotIn(
                 hardcoded, path.read_text(encoding="utf-8"), msg=f"{path}"
             )
+
+    def test_retrieved_knowledge_renders_from_payload_only(self):
+        # The verdict page must render retrieved chunks from the backend
+        # retrieved_context payload (chunk.title/snippet), never hardcoded.
+        verdict = (FRONTEND / "app" / "verdict" / "page.tsx").read_text(encoding="utf-8")
+        self.assertIn("v.retrievedKnowledge", verdict)
+        self.assertIn("chunk.snippet", verdict)
+        self.assertIn("chunk.title", verdict)
+        for stale in ("Hot Work SOP", "Gas Detection"):
+            self.assertNotIn(stale, verdict)
+
+    def test_dashboard_and_security_card_use_live_data_only(self):
+        # The dashboard hero stats and the zero-egress status card must derive
+        # from live payloads, never from a fabricated decorative scene.
+        for path in (
+            FRONTEND / "app" / "page.tsx",
+            FRONTEND / "components" / "dashboard" / "security-status-card.tsx",
+        ):
+            content = path.read_text(encoding="utf-8")
+            for stale in (
+                "99.98",
+                "1,284",
+                "eth0",
+                "Packet Monitoring",
+                "No external traffic permitted",
+            ):
+                self.assertNotIn(stale, content, msg=f"{path}")
+        card = (FRONTEND / "components" / "dashboard" / "security-status-card.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("getSecurityStatus", card)
+        self.assertIn("external_observed_since_start", card)
+        self.assertIn("external_connection_count", card)
 
     def test_no_cloud_services_or_secrets_in_frontend(self):
         offenders = []
@@ -323,6 +359,14 @@ class FrontendWorkflowTest(unittest.TestCase):
             self.assertEqual(sorted(step.keys()), ["stage", "status", "timestamp"])
             self.assertIn(step["status"], ("completed", "failed", "running"))
             self.assertTrue(step["timestamp"])
+        # The retrieved knowledge context must be persisted with the result.
+        context = result["retrieved_context"]
+        self.assertGreaterEqual(len(context), 1)
+        for chunk in context:
+            self.assertEqual(sorted(chunk.keys()), ["snippet", "source", "title"])
+            self.assertTrue(chunk["source"])
+            self.assertTrue(chunk["title"])
+            self.assertTrue(chunk["snippet"])
 
     def test_audit_feed_and_chain_after_processing(self):
         headers = {"Authorization": f"Bearer {self._token()}"}

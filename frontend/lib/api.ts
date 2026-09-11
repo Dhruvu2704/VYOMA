@@ -114,6 +114,12 @@ export interface BackendExecutionTraceStep {
   timestamp: string
 }
 
+export interface BackendRetrievedChunk {
+  source: string
+  title: string
+  snippet: string
+}
+
 export interface BackendTaskResult {
   deterministic_safety_evaluated: boolean
   rule_result: string | null
@@ -129,6 +135,7 @@ export interface BackendTaskResult {
   explanation: string
   generated_at: string | null
   execution_trace: BackendExecutionTraceStep[] | null
+  retrieved_context: BackendRetrievedChunk[] | null
 }
 
 export interface BackendTask {

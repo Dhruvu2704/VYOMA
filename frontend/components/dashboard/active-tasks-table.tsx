@@ -41,6 +41,7 @@ export function ActiveTasksTable({ tasks }: { tasks: ActiveTask[] }) {
                 <td className="px-4 py-3">
                   <Link
                     href="/verdict"
+                    onClick={() => sessionStorage.setItem('vyoma_task_id', t.taskId)}
                     className="font-mono text-xs text-primary transition-colors hover:text-primary/80"
                   >
                     {t.taskId}

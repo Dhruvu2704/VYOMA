@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'VYOMA KAVACH — Industrial Safety Intelligence',
+  title: 'VYOMA · KAVACH — Industrial Safety Intelligence',
   description:
     'AI-powered Permit-to-Work and P&ID safety verification platform for industrial control rooms.',
 }

@@ -138,7 +138,6 @@ export default function NewInspectionPage() {
   const router = useRouter()
   const toast = useToast()
   const [ptw, setPtw] = useState<FileState | null>(null)
-  const [pid, setPid] = useState<FileState | null>(null)
   const [starting, setStarting] = useState(false)
 
   const officer = getCurrentUser()
@@ -214,16 +213,20 @@ export default function NewInspectionPage() {
           onSelect={setPtw}
           onRemove={() => setPtw(null)}
         />
-        <UploadZone
-          index="02"
-          title="P&ID Drawing"
-          supported="Optional — envelope carries P&ID"
-          hint="Drop P&ID drawing here (optional)"
-          icon={Map}
-          file={pid}
-          onSelect={setPid}
-          onRemove={() => setPid(null)}
-        />
+        <Panel corners className="flex flex-col gap-4 p-4">
+          <PanelHeader title="02 — P&ID Drawing" icon={Map} />
+          <div className="flex items-start gap-3 rounded-md border border-border bg-background/40 p-4">
+            <ScanSearch className="mt-0.5 size-5 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Included in the contract envelope</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                The P&ID topology (structured_pid) travels inside the PTW envelope JSON — no separate
+                drawing upload is required. The pipeline cross-checks permit work zones against the
+                diagram automatically.
+              </p>
+            </div>
+          </div>
+        </Panel>
       </div>
 
       {/* Inspection summary */}
@@ -232,7 +235,7 @@ export default function NewInspectionPage() {
         <div className="grid gap-6 p-5 md:grid-cols-2">
           <dl className="space-y-3 text-sm">
             <SummaryRow label="Permit" value={ptw ? ptw.name.replace(/\.[^.]+$/, '') : '—'} />
-            <SummaryRow label="P&ID" value={pid ? pid.name.replace(/\.[^.]+$/, '') : '—'} />
+            <SummaryRow label="P&ID" value="Included in envelope" />
             <SummaryRow label="Inspection Type" value="Full Safety Verification" />
             <SummaryRow label="Officer" value={officer ? officer.toUpperCase() : 'NOT SIGNED IN'} />
           </dl>

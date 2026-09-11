@@ -47,7 +47,7 @@ const sectionTitles: Record<string, string> = {
   '/processing': 'Processing Monitor',
   '/verdict': 'Verdict',
   '/annotated': 'Annotated P&ID',
-  '/security': 'Zero-Egress Security',
+  '/security': 'Security Operations',
   '/audit': 'Audit Trail',
   '/workbench': 'Workbench',
   '/deliverables': 'Deliverables',
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     toast.push({ kind: 'info', title: 'Signed out', message: 'Local session cleared.' })
   }
 
-  const section = sectionTitles[pathname] ?? 'VYOMA KAVACH'
+  const section = sectionTitles[pathname] ?? 'VYOMA'
   const apiConnected = apiUp === true
   const apiKnown = apiUp !== null
 
@@ -101,10 +101,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {!collapsed && (
             <div className="min-w-0">
               <p className="truncate font-mono text-sm font-bold tracking-widest text-foreground">
-                VYOMA KAVACH
+                VYOMA
               </p>
               <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">
-                Industrial Safety Intelligence
+                KAVACH · Industrial Safety Intelligence
               </p>
             </div>
           )}

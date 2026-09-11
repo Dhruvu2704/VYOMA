@@ -9,7 +9,7 @@ import { ActiveTasksTable } from '@/components/dashboard/active-tasks-table'
 import { ActivityTimeline } from '@/components/dashboard/activity-timeline'
 import { SecurityStatusCard } from '@/components/dashboard/security-status-card'
 import { ShieldHero } from '@/components/three/shield-hero'
-import { getActiveTasks, getHealth, isAuthed, type BackendTask } from '@/lib/api'
+import { getActiveTasks, getHealth, getSecurityStatus, getWorkbenchStatus, isAuthed, type BackendTask, type SecurityStatus } from '@/lib/api'
 import { openAuth } from '@/components/auth-modal'
 import type { ActiveTask, ActivityEvent } from '@/lib/mock-data'
 
@@ -73,12 +73,17 @@ export default function DashboardPage() {
   const [authed, setAuthed] = useState(isAuthed())
   const [apiUp, setApiUp] = useState<boolean | null>(null)
   const [tasks, setTasks] = useState<BackendTask[]>([])
+  const [egress, setEgress] = useState<SecurityStatus | null>(null)
   const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     getHealth()
       .then(() => setApiUp(true))
       .catch(() => setApiUp(false))
+
+    getSecurityStatus()
+      .then(setEgress)
+      .catch(() => setEgress(null))
 
     if (!isAuthed()) return
 
@@ -119,7 +124,7 @@ export default function DashboardPage() {
         <div className="relative grid items-center gap-4 lg:grid-cols-[1fr_360px]">
           <div className="p-6 sm:p-8">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-primary">
-              <ShieldHalf className="size-3.5" /> Vyoma Kavach v2.6
+              <ShieldHalf className="size-3.5" /> VYOMA · KAVACH
             </div>
             <h3 className="max-w-xl text-balance text-2xl font-bold leading-tight text-foreground sm:text-3xl">
               AI-verified Permit-to-Work &amp; P&amp;ID safety intelligence
@@ -131,15 +136,21 @@ export default function DashboardPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-6">
               <div>
-                <p className="font-mono text-2xl font-bold text-safe tabular-nums">99.98%</p>
-                <p className="text-xs text-muted-foreground">Analysis uptime</p>
+                <p className="font-mono text-2xl font-bold text-safe tabular-nums">
+                  {String(active).padStart(2, '0')}
+                </p>
+                <p className="text-xs text-muted-foreground">Active inspections</p>
               </div>
               <div>
-                <p className="font-mono text-2xl font-bold text-foreground tabular-nums">1,284</p>
+                <p className="font-mono text-2xl font-bold text-foreground tabular-nums">
+                  {String(verified).padStart(2, '0')}
+                </p>
                 <p className="text-xs text-muted-foreground">Permits verified</p>
               </div>
               <div>
-                <p className="font-mono text-2xl font-bold text-info tabular-nums">0</p>
+                <p className="font-mono text-2xl font-bold text-info tabular-nums">
+                  {String(egress?.external_connection_count ?? '—')}
+                </p>
                 <p className="text-xs text-muted-foreground">External connections</p>
               </div>
             </div>
@@ -208,20 +219,50 @@ export default function DashboardPage() {
 
 function ModuleHealth() {
   const [backend, setBackend] = useState<'ONLINE' | 'OFFLINE'>('ONLINE')
+  const [ollama, setOllama] = useState<'unreachable' | 'online' | null>(null)
+  const [provider, setProvider] = useState<string | null>(null)
+  const [zeroEgress, setZeroEgress] = useState<boolean | null>(null)
+  const [auditValid, setAuditValid] = useState<boolean | null>(null)
 
   useEffect(() => {
     getHealth()
       .then(() => setBackend('ONLINE'))
       .catch(() => setBackend('OFFLINE'))
+    getWorkbenchStatus()
+      .then((s) => {
+        setOllama(s.ollama.status)
+        setProvider(s.orchestrator.reasoning_provider)
+      })
+      .catch(() => setOllama('unreachable'))
+    getSecurityStatus()
+      .then((s) => {
+        setZeroEgress(s.external_observed_since_start === 0)
+        setAuditValid(s.audit_chain.valid)
+      })
+      .catch(() => {
+        setZeroEgress(false)
+        setAuditValid(false)
+      })
   }, [])
 
+  const llmOnline = ollama === 'online'
   const items = [
     { label: 'Backend API', value: backend, tone: backend === 'ONLINE' ? 'text-safe' : 'text-danger' },
-    { label: 'AI / LLM Agent', value: 'LOCAL', tone: 'text-safe' },
-    { label: 'P&ID Graph Engine', value: 'ONLINE', tone: 'text-safe' },
-    { label: 'Audit Ledger', value: 'SYNCED', tone: 'text-safe' },
-    { label: 'Document OCR', value: 'ONLINE', tone: 'text-safe' },
-    { label: 'Net Monitor', value: 'ENFORCED', tone: 'text-info' },
+    {
+      label: 'Local Reasoning Engine',
+      value: provider ?? (ollama === null ? 'PROBING' : llmOnline ? 'LOCAL' : 'OFFLINE'),
+      tone: ollama === null || llmOnline ? 'text-safe' : 'text-danger',
+    },
+    {
+      label: 'Zero-Egress',
+      value: zeroEgress === null ? 'PROBING' : zeroEgress ? 'ENFORCED' : 'BREACHED',
+      tone: zeroEgress ? 'text-safe' : 'text-danger',
+    },
+    {
+      label: 'Audit Chain',
+      value: auditValid === null ? 'PROBING' : auditValid ? 'SYNCED' : 'INVALID',
+      tone: auditValid ? 'text-safe' : 'text-danger',
+    },
   ]
   return (
     <div className="relative h-full overflow-hidden rounded-md border border-border bg-card">
@@ -230,11 +271,11 @@ function ModuleHealth() {
           Module Health
         </h3>
       </div>
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
         {items.map((it) => (
           <div key={it.label} className="bg-card p-4">
             <p className="text-xs text-muted-foreground">{it.label}</p>
-            <p className={`mt-1 font-mono text-sm font-bold ${it.tone}`}>{it.value}</p>
+            <p className={`mt-1 truncate font-mono text-sm font-bold ${it.tone}`}>{it.value}</p>
           </div>
         ))}
       </div>

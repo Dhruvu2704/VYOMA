@@ -96,7 +96,7 @@ export function AuthModal({ onUserChange }: { onUserChange: () => void }) {
             <ShieldHalf className="size-6 text-primary" />
           </span>
           <div>
-            <h3 className="font-mono text-sm font-bold tracking-widest text-foreground">VYOMA KAVACH</h3>
+            <h3 className="font-mono text-sm font-bold tracking-widest text-foreground">VYOMA · KAVACH</h3>
             <p className="text-xs text-muted-foreground">Sign in to the local safety backend</p>
           </div>
         </div>

@@ -16,6 +16,12 @@ export interface ExecutionTraceStep {
   timestamp: string
 }
 
+export interface RetrievedChunk {
+  source: string
+  title: string
+  snippet: string
+}
+
 export interface VerdictModel {
   taskId: string
   permitId: string
@@ -35,6 +41,7 @@ export interface VerdictModel {
   deterministicEvaluated: boolean
   auditRef: string | null
   executionTrace: ExecutionTraceStep[]
+  retrievedKnowledge: RetrievedChunk[]
 }
 
 // Structural subset of the backend task payload (see backend/api/tasks.py).
@@ -58,6 +65,7 @@ interface VerdictTask {
     requires_human_review: boolean | null
     explanation: string | null
     execution_trace: Array<{ stage: string; status: string; timestamp: string }> | null
+    retrieved_context: Array<{ source: string; title: string; snippet: string }> | null
   } | null
 }
 
@@ -109,6 +117,11 @@ export function buildVerdictModel(task: VerdictTask): VerdictModel {
       stage: step.stage,
       status: step.status,
       timestamp: step.timestamp,
+    })),
+    retrievedKnowledge: (r?.retrieved_context ?? []).map((chunk) => ({
+      source: chunk.source,
+      title: chunk.title,
+      snippet: chunk.snippet,
     })),
   }
 }

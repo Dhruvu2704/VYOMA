@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
-import { Minus, Plus, Maximize2, Scan, Download, MapPin } from 'lucide-react'
+import { Minus, Plus, Maximize2, Scan, Download, MapPin, Loader2 } from 'lucide-react'
 import { PageContainer, PageHeader } from '@/components/page-header'
 import { Panel, PanelHeader } from '@/components/panel'
 import { StatusBadge } from '@/components/status-badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/toast'
+import { getDeliverables, downloadDeliverable, isAuthed } from '@/lib/api'
 import { annotations } from '@/lib/mock-data'
 
 const severityRing: Record<string, string> = {
@@ -20,8 +21,65 @@ export default function AnnotatedPage() {
   const toast = useToast()
   const [zoom, setZoom] = useState(100)
   const [active, setActive] = useState<number | null>(1)
+  const [annotatedName, setAnnotatedName] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const viewerRef = useRef<HTMLDivElement>(null)
 
   const clampZoom = (z: number) => Math.max(50, Math.min(200, z))
+
+  useEffect(() => {
+    const taskId = sessionStorage.getItem('vyoma_task_id')
+    if (!taskId || !isAuthed()) return
+    getDeliverables(taskId)
+      .then((response) => {
+        const pdf = response.deliverables.find((d) => d.file_type === 'ANNOTATED_PDF')
+        if (pdf) setAnnotatedName(pdf.filename)
+      })
+      .catch(() => setAnnotatedName(null))
+  }, [])
+
+  const download = async () => {
+    const taskId = sessionStorage.getItem('vyoma_task_id')
+    if (!taskId) {
+      toast.push({ kind: 'warning', title: 'No task selected', message: 'Upload and process a permit before exporting.' })
+      return
+    }
+    if (!isAuthed()) {
+      toast.push({ kind: 'warning', title: 'Sign in required', message: 'Sign in to the local backend to export deliverables.' })
+      return
+    }
+    if (!annotatedName) {
+      toast.push({
+        kind: 'error',
+        title: 'No annotated export yet',
+        message: 'This task has no annotated P&ID deliverable. Processes with a P&ID envelope generate one.',
+      })
+      return
+    }
+    setDownloading(true)
+    try {
+      await downloadDeliverable(taskId, annotatedName)
+      toast.push({ kind: 'success', title: 'Export downloaded', message: annotatedName })
+    } catch (error) {
+      toast.push({
+        kind: 'error',
+        title: 'Download failed',
+        message: error instanceof Error ? error.message : 'The export could not be downloaded.',
+      })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {})
+      return
+    }
+    viewerRef.current?.requestFullscreen?.().catch(() =>
+      toast.push({ kind: 'info', title: 'Fullscreen unavailable', message: 'Your browser blocked fullscreen for this viewer.' }),
+    )
+  }
 
   return (
     <PageContainer>
@@ -30,10 +88,12 @@ export default function AnnotatedPage() {
         subtitle="Safety-relevant areas identified during analysis."
         action={
           <button
-            onClick={() => toast.push({ kind: 'info', title: 'Download started', message: 'Annotated P&ID export' })}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            onClick={download}
+            disabled={downloading}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
           >
-            <Download className="size-4" /> Download Annotated P&ID
+            {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Download Annotated P&ID
           </button>
         }
       />
@@ -42,7 +102,7 @@ export default function AnnotatedPage() {
         {/* Viewer */}
         <Panel corners className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
-            <span className="font-mono text-xs text-muted-foreground">Unit_A_PID.pdf</span>
+            <span className="font-mono text-xs text-muted-foreground">{annotatedName ?? 'Unit_A_PID.pdf'}</span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setZoom((z) => clampZoom(z - 10))}
@@ -67,6 +127,7 @@ export default function AnnotatedPage() {
                 <Scan className="size-4" /> Fit
               </button>
               <button
+                onClick={toggleFullscreen}
                 className="flex items-center gap-1 rounded px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
                 <Maximize2 className="size-4" /> Fullscreen
@@ -76,6 +137,7 @@ export default function AnnotatedPage() {
 
           <div className="relative aspect-[4/3] w-full overflow-auto bg-background">
             <div
+              ref={viewerRef}
               className="relative mx-auto h-full origin-center transition-transform duration-200"
               style={{ transform: `scale(${zoom / 100})` }}
             >

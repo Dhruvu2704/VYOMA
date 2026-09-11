@@ -14,6 +14,7 @@ import {
   FileDown,
   Loader2,
   Route,
+  BookOpen,
 } from 'lucide-react'
 import { PageContainer, PageHeader } from '@/components/page-header'
 import { Panel, PanelHeader } from '@/components/panel'
@@ -264,6 +265,32 @@ export default function VerdictPage() {
               </li>
             ))}
           </ol>
+        )}
+      </Panel>
+
+      {/* Retrieved knowledge */}
+      <Panel corners className="mt-6">
+        <PanelHeader title="Retrieved Knowledge" icon={BookOpen} />
+        {v.retrievedKnowledge.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">
+            No knowledge context was retrieved for this task.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {v.retrievedKnowledge.map((chunk, index) => (
+              <li key={`${chunk.source}-${index}`} className="px-4 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-foreground">{chunk.title}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {chunk.source}
+                  </span>
+                </div>
+                <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                  {chunk.snippet}
+                </p>
+              </li>
+            ))}
+          </ul>
         )}
       </Panel>
     </PageContainer>
