@@ -28,28 +28,45 @@ import { cn } from '@/lib/utils'
 import { StatusDot } from '@/components/status-badge'
 import { getCurrentUser, getHealth, getSecurityStatus, isAuthed, logout } from '@/lib/api'
 import { AuthModal, openAuth } from '@/components/auth-modal'
+import type { LucideIcon } from 'lucide-react'
 
-const nav = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/new-inspection', label: 'New Inspection', icon: FilePlus2 },
-  { href: '/processing', label: 'Processing', icon: Activity },
-  { href: '/verdict', label: 'Verdict', icon: Gavel },
-  { href: '/annotated', label: 'Annotated P&ID', icon: Map },
-  { href: '/security', label: 'Security', icon: ShieldHalf },
-  { href: '/audit', label: 'Audit Trail', icon: ScrollText },
-  { href: '/workbench', label: 'Workbench', icon: Settings },
-  { href: '/deliverables', label: 'Deliverables', icon: FileDown },
+const sections: { label: string; items: { href: string; label: string; icon: LucideIcon }[] }[] = [
+  {
+    label: 'Overview',
+    items: [{ href: '/', label: 'Overview', icon: LayoutDashboard }],
+  },
+  {
+    label: 'AI WORKBENCH',
+    items: [{ href: '/workbench', label: 'AI Workspace', icon: Settings }],
+  },
+  {
+    label: 'INDUSTRIAL APPS · KAVACH',
+    items: [
+      { href: '/new-inspection', label: 'PTW Analysis', icon: FilePlus2 },
+      { href: '/processing', label: 'Processing', icon: Activity },
+      { href: '/verdict', label: 'Safety Review', icon: Gavel },
+      { href: '/annotated', label: 'Annotated P&ID', icon: Map },
+      { href: '/deliverables', label: 'Deliverables', icon: FileDown },
+    ],
+  },
+  {
+    label: 'GOVERNANCE',
+    items: [
+      { href: '/security', label: 'Security', icon: ShieldHalf },
+      { href: '/audit', label: 'Audit Trail', icon: ScrollText },
+    ],
+  },
 ]
 
 const sectionTitles: Record<string, string> = {
-  '/': 'Safety Operations Center',
-  '/new-inspection': 'New Inspection',
+  '/': 'Overview',
+  '/new-inspection': 'PTW Analysis',
   '/processing': 'Processing Monitor',
-  '/verdict': 'Verdict',
+  '/verdict': 'Safety Review',
   '/annotated': 'Annotated P&ID',
   '/security': 'Security Operations',
   '/audit': 'Audit Trail',
-  '/workbench': 'Workbench',
+  '/workbench': 'AI Workspace',
   '/deliverables': 'Deliverables',
 }
 
@@ -115,31 +132,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {nav.map((item) => {
-            const active = pathname === item.href
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                title={collapsed ? item.label : undefined}
-                className={cn(
-                  'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-sidebar-accent text-foreground'
-                    : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-                )}
-              >
-                {active && (
-                  <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
-                )}
-                <Icon className={cn('size-5 shrink-0', active && 'text-primary')} />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
-            )
-          })}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {sections.map((section) => (
+            <div key={section.label} className="mb-4 last:mb-0">
+              {!collapsed && (
+                <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  {section.label}
+                </p>
+              )}
+              <div className="space-y-1">
+                {section.items.map((item) => {
+                  const active = pathname === item.href
+                  const Icon = item.icon
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        'group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                        active
+                          ? 'bg-sidebar-accent text-foreground'
+                          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
+                      )}
+                    >
+                      {active && (
+                        <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
+                      )}
+                      <Icon className={cn('size-5 shrink-0', active && 'text-primary')} />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* System status */}

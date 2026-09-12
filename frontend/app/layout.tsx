@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'VYOMA · KAVACH — Industrial Safety Intelligence',
+  title: 'VYOMA — Sovereign Industrial AI Workbench',
   description:
-    'AI-powered Permit-to-Work and P&ID safety verification platform for industrial control rooms.',
+    'VYOMA is a sovereign, on-premise industrial AI workbench. KAVACH, its flagship industrial app, delivers AI-verified Permit-to-Work and P&ID safety intelligence inside a zero-egress environment.',
 }
 
 export const viewport: Viewport = {

@@ -106,8 +106,8 @@ export default function DashboardPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Safety Operations Center"
-        subtitle="Permit verification and industrial safety monitoring"
+        title="Overview"
+        subtitle="Sovereign Industrial AI Workbench — live operating posture across the VYOMA platform and its KAVACH app"
         action={
           <Link
             href="/new-inspection"
