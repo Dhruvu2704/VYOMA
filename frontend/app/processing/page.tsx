@@ -49,11 +49,13 @@ export default function ProcessingPage() {
   const [progress, setProgress] = useState(8)
   const [taskStatus, setTaskStatus] = useState('CREATED')
   const [failedError, setFailedError] = useState('')
+  const [reasoning, setReasoning] = useState(false)
   const [log, setLog] = useState<{ time: string; msg: string }[]>([])
   const logRef = useRef<HTMLDivElement>(null)
   const startedRef = useRef(false)
   const queueNotedRef = useRef(false)
   const completedLoggedRef = useRef(false)
+  const reasoningNotedRef = useRef(false)
   useNow()
 
   // Log the completion lines exactly once, regardless of how many poll cycles
@@ -127,6 +129,13 @@ export default function ProcessingPage() {
         }
       } else if (task.status === 'PROCESSING') {
         setProgress((p) => Math.min(90, Math.max(p, 45)))
+        if (!reasoningNotedRef.current) {
+          reasoningNotedRef.current = true
+          setReasoning(true)
+          pushLog(
+            'Local AI reasoning in progress — local model computing, this stage can take a while',
+          )
+        }
       } else if (task.status === 'COMPLETED') {
         setProgress(100)
         logCompletion(task.audit_ref)
@@ -165,7 +174,10 @@ export default function ProcessingPage() {
 
   const done = taskStatus === 'COMPLETED'
   const failed = taskStatus === 'FAILED'
-  const activeStage = Math.min(6, Math.floor((progress / 100) * 6) + (done ? 0 : 1))
+  const activeStage =
+    reasoning && taskStatus === 'PROCESSING'
+      ? 4
+      : Math.min(6, Math.floor((progress / 100) * 6) + (done ? 0 : 1))
 
   const stageStatus = (id: number): 'complete' | 'processing' | 'waiting' => {
     if (id < activeStage || done) return 'complete'
@@ -237,7 +249,13 @@ export default function ProcessingPage() {
                 {failed ? 0 : Math.round(progress)}%
               </span>
               <span className="mt-1 text-xs text-muted-foreground">
-                {failed ? 'Analysis failed' : done ? 'Analysis complete' : 'Analyzing permit…'}
+                {failed
+                  ? 'Analysis failed'
+                  : done
+                    ? 'Analysis complete'
+                    : reasoning
+                      ? 'Local AI reasoning in progress…'
+                      : 'Analyzing permit…'}
               </span>
             </div>
           </div>
@@ -303,7 +321,9 @@ export default function ProcessingPage() {
                       {st === 'processing' && (
                         <>
                           <Loader2 className="size-3 animate-spin text-info" />
-                          <span className="text-info">Processing</span>
+                          <span className="text-info">
+                            {s.id === 4 ? 'Local AI reasoning' : 'Processing'}
+                          </span>
                         </>
                       )}
                       {st === 'waiting' && (
