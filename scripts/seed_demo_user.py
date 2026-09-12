@@ -21,6 +21,7 @@ if REPO_ROOT not in sys.path:
 
 from backend.db.database import Base, SessionLocal, engine
 from backend.db.models import User
+from backend.db.migrations import ensure_schema_upgraded
 from backend.services.password import hash_password
 
 DEMO_USERNAME = "officer"
@@ -31,6 +32,7 @@ ROLE = "SAFETY_OFFICER"
 
 def main() -> int:
     Base.metadata.create_all(bind=engine)
+    ensure_schema_upgraded(engine)
     with SessionLocal() as db:
         existing = db.query(User).filter(User.username == DEMO_USERNAME).first()
         if existing is not None:

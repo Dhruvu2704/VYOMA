@@ -30,11 +30,13 @@ def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
 def create_app() -> FastAPI:
     from backend.db.database import Base, engine
     from backend.db import models  # noqa: F401
+    from backend.db.migrations import ensure_schema_upgraded
     from backend.api import audit, auth, health, permits, tasks, workbench
     from backend.services.egress_monitor import EgressMonitor
     from backend.services.kavach import KavachConnector
 
     Base.metadata.create_all(bind=engine)
+    ensure_schema_upgraded(engine)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
