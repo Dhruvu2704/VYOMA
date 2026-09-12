@@ -7,6 +7,8 @@ level.
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime
@@ -34,6 +36,8 @@ from ai_agent.orchestrator.orchestrator import AgentOrchestrator  # noqa: E402
 from ai_agent.plant_safety_integration import evaluate_plant_safety  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent.parent / "ai_agent" / "fixtures"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+GENERATOR = REPO_ROOT / "scripts" / "make_synthetic_ptw_image.py"
 CLOUD_PROVIDERS = ("openai", "anthropic", "claude", "gpt", "bedrock")
 
 
@@ -146,6 +150,135 @@ class BackendIntegrationTest(unittest.TestCase):
         result = self._process(body["task_id"], token)
         self.assertTrue(result["result"]["requires_human_review"])
         return body
+
+    def _synthetic_image(self) -> Path:
+        path = _TEST_BASE / "synthetic_ptw.png"
+        if not path.exists():
+            subprocess.run(
+                [sys.executable, str(GENERATOR), "--out", str(path)],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=str(REPO_ROOT),
+            )
+        return path
+
+    def _upload_image(
+        self,
+        token: str,
+        filename: str,
+        content: bytes,
+        mime: str = "image/png",
+    ) -> Any:
+        return self.client.post(
+            "/api/tasks/upload-image",
+            files={"file": (filename, content, mime)},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    def _stored_envelope(self, task_id: str) -> Dict[str, Any]:
+        from backend.db.models import Task
+
+        numeric = int(task_id.replace("TASK-", ""))
+        with SessionLocal() as db:
+            stored = db.query(Task).filter(Task.id == numeric).first()
+            return json.loads(stored.input_json)
+
+    def test_upload_image_creates_task_with_real_ocr_fields(self) -> None:
+        token = self._seed_user("img1", "USER")
+        image_path = self._synthetic_image()
+        resp = self._upload_image(token, "ptw_scan.png", image_path.read_bytes())
+        self.assertEqual(resp.status_code, 201)
+        body = resp.json()
+        self.assertEqual(body["status"], "CREATED")
+        self.assertTrue(body["task_id"].startswith("TASK-"))
+
+        task = self.client.get(
+            f"/api/tasks/{body['task_id']}",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+        self.assertEqual(task["permit_id"], "MR-TEST-001")
+        self.assertEqual(task["scenario"], "image_upload")
+        self.assertEqual(task["filename"], "ptw_scan.png")
+
+        envelope = self._stored_envelope(body["task_id"])
+        ptw = envelope["structured_ptw"]
+        self.assertEqual(envelope["scenario"], "image_upload")
+        self.assertEqual(ptw["permit_id"], "MR-TEST-001")
+        self.assertEqual(ptw["work_type"], "HOT WORK")
+        self.assertEqual(ptw["issuer"], "JOHN SMITH")
+        self.assertIn("P-701", ptw["equipment_tags"])
+        self.assertIn("ISO-07", ptw["isolation_points"])
+        self.assertEqual(
+            envelope["structured_pid"]["equipment_tags"],
+            ["P-701", "V-702"],
+        )
+
+    def test_image_uploaded_task_processes_to_real_verdict(self) -> None:
+        token = self._seed_user("img2", "SAFETY_OFFICER")
+        image_path = self._synthetic_image()
+        resp = self._upload_image(token, "ptw.png", image_path.read_bytes())
+        self.assertEqual(resp.status_code, 201)
+        body = resp.json()
+
+        result = self._process(body["task_id"], token)
+        self.assertEqual(result["status"], "COMPLETED")
+        r = result["result"]
+        self.assertTrue(r["deterministic_safety_evaluated"])
+        self.assertIn(
+            r["final_decision"],
+            ("PASS", "FLAGGED_FOR_REVIEW", "REVIEW_REQUIRED"),
+        )
+        self.assertIsInstance(r["requires_human_review"], bool)
+
+        envelope = self._stored_envelope(body["task_id"])
+        self.assertEqual(
+            r["final_decision"],
+            self.recording.expected_decision(envelope),
+        )
+        self.assertEqual(len(self.recording.calls), 1)
+        self.assertEqual(self.recording.calls[0]["scenario"], "image_upload")
+        self.assertEqual(
+            self.recording.calls[0]["structured_ptw"]["permit_id"],
+            "MR-TEST-001",
+        )
+
+    def test_upload_image_rejects_wrong_extension(self) -> None:
+        token = self._seed_user("img3", "USER")
+        resp = self._upload_image(
+            token,
+            "notes.txt",
+            b"PERMIT NO: MR-TEST-001",
+            mime="text/plain",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("png", resp.json()["detail"].lower())
+
+    def test_upload_image_rejects_oversized_file(self) -> None:
+        token = self._seed_user("img4", "USER")
+        resp = self._upload_image(
+            token,
+            "big.png",
+            b"x" * (10 * 1024 * 1024 + 1),
+        )
+        self.assertEqual(resp.status_code, 413)
+
+    def test_upload_image_requires_upload_permission(self) -> None:
+        token = self._seed_user("img5", "INSPECTOR")
+        resp = self._upload_image(token, "ptw.png", b"irrelevant")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_upload_image_corrupted_rejects_with_real_error(self) -> None:
+        token = self._seed_user("img6", "USER")
+        resp = self._upload_image(
+            token,
+            "fake.png",
+            b"this is not an image at all",
+        )
+        self.assertEqual(resp.status_code, 422)
+        detail = resp.json()["detail"]
+        self.assertIn("could not be read", detail.lower())
+        self.assertNotIn("success", detail.lower())
 
     def test_health_endpoint(self) -> None:
         resp = self.client.get("/api/health")

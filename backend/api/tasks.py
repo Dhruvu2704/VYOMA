@@ -39,6 +39,8 @@ from backend.services.task_processor import (
     process_task,
 )
 
+from ai_agent.vision.ptw_pipeline import process_ptw_image
+
 router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
 
 
@@ -138,6 +140,77 @@ def _validate_envelope(data: Any) -> None:
         )
 
 
+def _create_task_from_envelope(
+    db: Session,
+    current_user: dict,
+    filename: str,
+    raw_bytes: bytes,
+    envelope: Dict[str, Any],
+) -> Task:
+    """Persist the uploaded bytes and create a Task row from a validated envelope.
+
+    Shared by the JSON and image upload paths so both enter the task
+    lifecycle through identical Task-creation logic.
+    """
+
+    upload_dir = Path(UPLOAD_DIR)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = f"{uuid.uuid4().hex}.json"
+    file_path = upload_dir / safe_name
+    file_path.write_bytes(raw_bytes)
+
+    ptw = envelope["structured_ptw"]
+    task = Task(
+        filename=filename,
+        file_path=str(file_path),
+        input_json=json.dumps(envelope),
+        status="CREATED",
+        scenario=str(envelope.get("scenario") or ""),
+        permit_id=str(ptw.get("permit_id") or ""),
+        created_by=current_user["user_id"],
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def _image_upload_envelope(
+    source: str,
+    structured_ptw: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build the KAVACH contract envelope for an OCR'd PTW image upload.
+
+    The ``structured_ptw`` is genuine OCR output. A minimal deterministic
+    ``structured_pid`` container is derived from the OCR'd Equipment Tags so
+    the existing plant-safety pipeline can run: no P&ID image/vision is
+    involved and no topology is invented. graph_facts stays server-derived
+    exactly as it is today.
+    """
+
+    tags = list(structured_ptw.get("equipment_tags") or [])
+    return {
+        "task_request": {
+            "permit_id": structured_ptw.get("permit_id", ""),
+            "task_type": "ptw_review",
+            "document_refs": [source],
+            "context": {},
+        },
+        "structured_ptw": structured_ptw,
+        "structured_pid": {
+            "pid_id": source,
+            "source": source,
+            "equipment_tags": tags,
+            "symbols": [],
+            "connections": [],
+            "unresolved_symbols": [],
+            "field_confidence": {},
+            "low_confidence_fields": [],
+        },
+        "scenario": "image_upload",
+    }
+
+
 @router.post("/upload", status_code=201)
 async def upload_task(
     file: UploadFile = File(...),
@@ -168,25 +241,73 @@ async def upload_task(
         ) from exc
     _validate_envelope(envelope)
 
+    task = _create_task_from_envelope(
+        db,
+        current_user,
+        filename,
+        raw,
+        envelope,
+    )
+
+    return {
+        "task_id": f"TASK-{task.id:03d}",
+        "filename": task.filename,
+        "status": task.status,
+        "message": "File uploaded successfully",
+    }
+
+
+@router.post("/upload-image", status_code=201)
+async def upload_task_image(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_user),
+):
+    """Upload a PTW document image and enter the task lifecycle via real OCR.
+
+    The image is read with the locally installed Tesseract binary (fully
+    offline), the genuine OCR text is parsed into a StructuredPTW, and the
+    resulting envelope goes through the same Task-creation path as the JSON
+    upload.
+    """
+
+    require_tool_permission(current_user, "upload_document")
+
+    filename = file.filename or ""
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    extension = Path(filename).suffix.lower()
+    if extension not in {".png", ".jpg", ".jpeg"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Only .png, .jpg and .jpeg PTW document images are allowed",
+        )
+
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large")
+
     upload_dir = Path(UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = f"{uuid.uuid4().hex}.json"
-    file_path = upload_dir / safe_name
-    file_path.write_bytes(raw)
+    image_path = upload_dir / f"{uuid.uuid4().hex}{extension}"
+    image_path.write_bytes(raw)
 
-    ptw = envelope["structured_ptw"]
-    task = Task(
-        filename=filename,
-        file_path=str(file_path),
-        input_json=json.dumps(envelope),
-        status="CREATED",
-        scenario=str(envelope.get("scenario") or ""),
-        permit_id=str(ptw.get("permit_id") or ""),
-        created_by=current_user["user_id"],
+    try:
+        structured_ptw = process_ptw_image(
+            source=filename,
+            image_path=str(image_path),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    envelope = _image_upload_envelope(filename, structured_ptw)
+    task = _create_task_from_envelope(
+        db,
+        current_user,
+        filename,
+        json.dumps(envelope).encode("utf-8"),
+        envelope,
     )
-    db.add(task)
-    db.commit()
-    db.refresh(task)
 
     return {
         "task_id": f"TASK-{task.id:03d}",
