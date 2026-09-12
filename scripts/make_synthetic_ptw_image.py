@@ -19,11 +19,15 @@ from typing import Union
 from PIL import Image, ImageDraw, ImageFont
 
 SYNTHETIC_PTW_LINES = [
-    "PERMIT NO: MR-TEST-001",
-    "WORK TYPE: COLD WORK",
-    "LOCATION: UNIT-7, AREA-03",
-    "START: 2026-09-12 08:00",
-    "END: 2026-09-12 17:00",
+    "Permit ID: MR-TEST-001",
+    "Work Type: HOT WORK",
+    "Scope: DISCHARGE LINE REPLACEMENT",
+    "Location: UNIT-7, AREA-03",
+    "Start Time: 2026-09-12 08:00",
+    "End Time: 2026-09-12 17:00",
+    "Issuer: JOHN SMITH",
+    "Equipment Tags: P-701, V-702",
+    "Isolation Points: ISO-07, ISO-08",
 ]
 
 
@@ -40,11 +44,17 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont:
 def render_synthetic_ptw_image(
     dest: Union[str, Path],
     *,
-    width: int = 1100,
-    height: int = 500,
+    width: int = 1300,
+    height: int = 760,
     font_size: int = 44,
 ) -> Path:
-    """Render known PTW-like text onto a blank image and save it as PNG."""
+    """Render known PTW-like text onto a blank image and save it as PNG.
+
+    The service image renders all nine fields ptw_parser field patterns
+    expect (Permit ID, Work Type, Scope, Location, Start Time, End Time,
+    Issuer, Equipment Tags, Isolation Points). The canvas is sized so every
+    line fits: Tesseract must be able to read all of them cleanly.
+    """
     dest_path = Path(dest)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
