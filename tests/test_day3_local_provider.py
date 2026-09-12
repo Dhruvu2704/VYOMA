@@ -287,9 +287,11 @@ class OllamaProviderInterfaceTests(unittest.TestCase):
         provider.generate("hello", capability="reasoning", messages=None)
         # internal VYOMA capability must never leak into the Ollama request.
         self.assertEqual(
-            set(captured["payload"].keys()), {"model", "messages", "stream"}
+            set(captured["payload"].keys()),
+            {"model", "messages", "stream", "options"},
         )
         self.assertEqual(captured["payload"]["stream"], False)
+        self.assertEqual(captured["payload"]["options"], {"num_predict": 300})
         self.assertNotIn("capability", captured["payload"])
 
     def test_provider_records_last_payload(self) -> None:

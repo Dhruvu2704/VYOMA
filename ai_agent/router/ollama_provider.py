@@ -245,6 +245,7 @@ class OllamaModelProvider(ModelProvider):
             "model": self._config.model,
             "messages": chat_messages,
             "stream": False,
+            "options": {"num_predict": 300},
         }
         return payload
 
