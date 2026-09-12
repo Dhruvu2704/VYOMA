@@ -1,0 +1,94 @@
+{
+  "scenario": "multiple-conflicts",
+  "description": "Synthetic MockRefinery multi-conflict case. Hot work in a bay where TWO other active permits overlap the same window and a live isolation is in place. Intended outcome: FLAGGED / FLAGGED / AGREE / FLAGGED_FOR_REVIEW / human review, triggering permit-conflict + hot-work-overlap + isolation-overlap-time-window with two conflicting permit IDs.",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0024-MULTI",
+    "task_type": "ptw_review",
+    "document_refs": [
+      "mock:ptw/multi_0024.json",
+      "mock:permits/MR-0025-M1.json",
+      "mock:permits/MR-0026-M2.json"
+    ],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0024-MULTI",
+    "work_type": "hot-work",
+    "scope": "Grinding on pump P-601 base; two other active permits in the same bay and a live isolation are in effect.",
+    "location": ["Unit-13", "Pump-Bay"],
+    "start_time": "2026-09-06T11:00:00Z",
+    "end_time": "2026-09-06T14:00:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/multi_0024.json",
+    "equipment_tags": ["P-601", "LF-602"],
+    "isolation_points": ["ISO-P601-01"],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.95,
+      "scope": 0.92,
+      "equipment_tags": 0.9,
+      "isolation_points": 0.85
+    },
+    "low_confidence_fields": []
+  },
+  "structured_pid": {
+    "pid_id": "PID-MULTI-0024",
+    "source": "mock:pid/multi_0024.dwg",
+    "equipment_tags": ["P-601", "LF-602"],
+    "symbols": [
+      {
+        "symbol_id": "P-601",
+        "symbol_type": "PUMP",
+        "properties": {"service": "process", "tag_resolved": true},
+        "connections": ["LF-602"]
+      },
+      {
+        "symbol_id": "LF-602",
+        "symbol_type": "LINE",
+        "properties": {"line_class": "process", "tag_resolved": true},
+        "connections": ["P-601"]
+      }
+    ],
+    "connections": [
+      {"source": "P-601", "target": "LF-602", "line_ref": "LF-602"}
+    ],
+    "unresolved_symbols": [],
+    "field_confidence": {
+      "equipment_tags": 0.9,
+      "symbols": 0.88,
+      "connections": 0.86,
+      "unresolved_symbols": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "graph_facts": {
+    "permit_id": "MR-0024-MULTI",
+    "resolved_nodes": ["P-601", "LF-602"],
+    "unresolved_tags": [],
+    "connected_equipment": {
+      "P-601": ["LF-602"]
+    },
+    "active_isolations": ["ISO-P601-01"],
+    "overlap_check": {
+      "overlapping_permits": ["MR-0025-M1", "MR-0026-M2"],
+      "same_area_active": true
+    }
+  },
+  "rule_verdict": {
+    "permit_id": "MR-0024-MULTI",
+    "conflicting_permit_ids": ["MR-0025-M1", "MR-0026-M2"],
+    "rules_triggered": [
+      "permit-conflict",
+      "hot-work-overlap",
+      "isolation-overlap-time-window"
+    ],
+    "rule_result": "FLAGGED",
+    "explanation": "Hot work overlaps two active permits in the same bay and a live isolation overlaps the same window.",
+    "confidence": "HIGH"
+  },
+  "expected_llm_result": "FLAGGED",
+  "expected_agreement": "AGREE",
+  "expected_final_decision": "FLAGGED_FOR_REVIEW",
+  "expected_human_review": true
+}

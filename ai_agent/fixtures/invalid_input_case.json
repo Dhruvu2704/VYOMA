@@ -1,0 +1,61 @@
+{
+  "scenario": "invalid-input",
+  "description": "Synthetic MockRefinery invalid-input case. The structured PTW is well formed, but the structured P&ID is malformed: its connections list references symbol MISSING-801 which is absent from the symbols list, so the plant-safety tool cannot build the graph. Intended outcome: the pipeline fails at the use_tool stage with a TopologyError-based message, no final verdict is produced, and nothing is declared PASS.",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0055-INV",
+    "task_type": "ptw_review",
+    "document_refs": ["mock:ptw/inv_0055.json"],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0055-INV",
+    "work_type": "cold-work",
+    "scope": "Inspection of P-801.",
+    "location": ["Unit-16"],
+    "start_time": "2026-09-06T08:00:00Z",
+    "end_time": "2026-09-06T12:00:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/inv_0055.json",
+    "equipment_tags": ["P-801"],
+    "isolation_points": [],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.98,
+      "scope": 0.9,
+      "equipment_tags": 0.9,
+      "isolation_points": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "structured_pid": {
+    "pid_id": "PID-INV-0055",
+    "source": "mock:pid/inv_0055.dwg",
+    "equipment_tags": ["P-801"],
+    "symbols": [
+      {
+        "symbol_id": "P-801",
+        "symbol_type": "PUMP",
+        "properties": {"service": "process", "tag_resolved": true},
+        "connections": []
+      }
+    ],
+    "connections": [
+      {"source": "P-801", "target": "MISSING-801", "line_ref": "L-801"}
+    ],
+    "unresolved_symbols": [],
+    "field_confidence": {
+      "equipment_tags": 0.9,
+      "symbols": 0.9,
+      "connections": 0.5,
+      "unresolved_symbols": 1.0
+    },
+    "low_confidence_fields": ["connections"]
+  },
+  "graph_facts": {},
+  "rule_verdict": {},
+  "expected_failure_stage": "use_tool",
+  "expected_error_type": "StageFailure",
+  "expected_error_match": "Plant-safety evaluation failed: TopologyError",
+  "expected_human_review": false
+}

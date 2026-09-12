@@ -1,0 +1,86 @@
+{
+  "scenario": "isolation-conflict",
+  "description": "Synthetic MockRefinery isolation-conflict case. A live isolation on the solvent line overlaps the time window of another active permit in the same store, but this permit is NOT hot work. Intended outcome: FLAGGED / FLAGGED / AGREE / FLAGGED_FOR_REVIEW / human review, with permit-conflict + isolation-overlap-time-window (no hot-work rule).",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0013-ISO",
+    "task_type": "ptw_review",
+    "document_refs": ["mock:ptw/iso_0013.json", "mock:permits/MR-0014-ISO.json"],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0013-ISO",
+    "work_type": "confined-space",
+    "scope": "Entry and bolting work inside storage tank T-510; a live isolation affects the solvent line.",
+    "location": ["Unit-12", "Solvent-Store"],
+    "start_time": "2026-09-06T09:30:00Z",
+    "end_time": "2026-09-06T15:30:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/iso_0013.json",
+    "equipment_tags": ["T-510", "LF-520"],
+    "isolation_points": ["ISO-T510-01"],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.97,
+      "scope": 0.95,
+      "equipment_tags": 0.94,
+      "isolation_points": 0.92
+    },
+    "low_confidence_fields": []
+  },
+  "structured_pid": {
+    "pid_id": "PID-ISO-0013",
+    "source": "mock:pid/iso_0013.dwg",
+    "equipment_tags": ["T-510", "LF-520"],
+    "symbols": [
+      {
+        "symbol_id": "T-510",
+        "symbol_type": "STORAGE_TANK",
+        "properties": {"service": "solvent", "tag_resolved": true},
+        "connections": ["LF-520"]
+      },
+      {
+        "symbol_id": "LF-520",
+        "symbol_type": "LINE",
+        "properties": {"line_class": "solvent", "tag_resolved": true},
+        "connections": ["T-510"]
+      }
+    ],
+    "connections": [
+      {"source": "T-510", "target": "LF-520", "line_ref": "LF-520"}
+    ],
+    "unresolved_symbols": [],
+    "field_confidence": {
+      "equipment_tags": 0.94,
+      "symbols": 0.93,
+      "connections": 0.91,
+      "unresolved_symbols": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "graph_facts": {
+    "permit_id": "MR-0013-ISO",
+    "resolved_nodes": ["T-510", "LF-520"],
+    "unresolved_tags": [],
+    "connected_equipment": {
+      "T-510": ["LF-520"]
+    },
+    "active_isolations": ["ISO-T510-01"],
+    "overlap_check": {
+      "overlapping_permits": ["MR-0014-ISO"],
+      "same_area_active": true
+    }
+  },
+  "rule_verdict": {
+    "permit_id": "MR-0013-ISO",
+    "conflicting_permit_ids": ["MR-0014-ISO"],
+    "rules_triggered": ["permit-conflict", "isolation-overlap-time-window"],
+    "rule_result": "FLAGGED",
+    "explanation": "A live isolation overlaps the time window of an active permit in the same store.",
+    "confidence": "HIGH"
+  },
+  "expected_llm_result": "FLAGGED",
+  "expected_agreement": "AGREE",
+  "expected_final_decision": "FLAGGED_FOR_REVIEW",
+  "expected_human_review": true
+}

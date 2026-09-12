@@ -1,0 +1,86 @@
+{
+  "scenario": "disagreement",
+  "description": "Synthetic MockRefinery LLM/deterministic disagreement case. All equipment tags resolve and there is no permit overlap, so the deterministic rule layer returns PASS (no-conflict, tags-resolved). However the PTW declares a live isolation point on the discharge line, which the LLM-side evidence verdict (active isolations not confirmed) treats as FLAGGED. Intended outcome through the PRODUCTION pipeline (plant_safety=True): PASS / FLAGGED / DISAGREE / REVIEW_REQUIRED / human review.",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0045-DISG",
+    "task_type": "ptw_review",
+    "document_refs": ["mock:ptw/disg_0045.json"],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0045-DISG",
+    "work_type": "cold-work",
+    "scope": "Cold bolt removal on pump P-710; a live isolation is declared on the discharge line.",
+    "location": ["Unit-15", "Pump-Pad"],
+    "start_time": "2026-09-06T07:30:00Z",
+    "end_time": "2026-09-06T11:30:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/disg_0045.json",
+    "equipment_tags": ["P-710", "LF-711"],
+    "isolation_points": ["ISO-P710-01"],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.98,
+      "scope": 0.94,
+      "equipment_tags": 0.93,
+      "isolation_points": 0.8
+    },
+    "low_confidence_fields": ["isolation_points"]
+  },
+  "structured_pid": {
+    "pid_id": "PID-DISG-0045",
+    "source": "mock:pid/disg_0045.dwg",
+    "equipment_tags": ["P-710", "LF-711"],
+    "symbols": [
+      {
+        "symbol_id": "P-710",
+        "symbol_type": "PUMP",
+        "properties": {"service": "process", "tag_resolved": true},
+        "connections": ["LF-711"]
+      },
+      {
+        "symbol_id": "LF-711",
+        "symbol_type": "LINE",
+        "properties": {"line_class": "process", "tag_resolved": true},
+        "connections": ["P-710"]
+      }
+    ],
+    "connections": [
+      {"source": "P-710", "target": "LF-711", "line_ref": "LF-711"}
+    ],
+    "unresolved_symbols": [],
+    "field_confidence": {
+      "equipment_tags": 0.92,
+      "symbols": 0.9,
+      "connections": 0.9,
+      "unresolved_symbols": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "graph_facts": {
+    "permit_id": "MR-0045-DISG",
+    "resolved_nodes": ["P-710", "LF-711"],
+    "unresolved_tags": [],
+    "connected_equipment": {
+      "P-710": ["LF-711"]
+    },
+    "active_isolations": ["ISO-P710-01"],
+    "overlap_check": {
+      "overlapping_permits": [],
+      "same_area_active": false
+    }
+  },
+  "rule_verdict": {
+    "permit_id": "MR-0045-DISG",
+    "conflicting_permit_ids": [],
+    "rules_triggered": ["no-conflict", "tags-resolved"],
+    "rule_result": "PASS",
+    "explanation": "All tags resolve and there is no permit overlap, so the rule layer flags nothing.",
+    "confidence": "HIGH"
+  },
+  "expected_llm_result": "FLAGGED",
+  "expected_agreement": "DISAGREE",
+  "expected_final_decision": "REVIEW_REQUIRED",
+  "expected_human_review": true
+}

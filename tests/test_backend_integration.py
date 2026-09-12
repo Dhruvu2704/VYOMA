@@ -303,6 +303,57 @@ class BackendIntegrationTest(unittest.TestCase):
         self.assertEqual(resp.json()["status"], "FAILED")
         self.assertIn("reasoning", resp.json()["error"])
 
+    def test_ollama_unavailable_reaches_failed(self) -> None:
+        # KAVACH scenario 9 end-to-end at the backend boundary: the DEFAULT
+        # entrypoint (execute_fixture -> plant_safety=True) cannot reach the
+        # reason provider, so the task is FAILED and never given a verdict.
+        app = create_app()
+        client = TestClient(app)
+        with SessionLocal() as db:
+            db.add(
+                User(
+                    username="ollama_off",
+                    password_hash=hash_password("p"),
+                    role="SAFETY_OFFICER",
+                )
+            )
+            db.commit()
+        token = client.post(
+            "/api/auth/login",
+            json={"username": "ollama_off", "password": "p"},
+        ).json()["access_token"]
+        body = client.post(
+            "/api/tasks/upload",
+            files={
+                "file": (
+                    "e.json",
+                    json.dumps(_load_fixture("conflict_case.json")).encode(),
+                    "application/json",
+                )
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+        prev_base = os.environ.pop("VYOMA_OLLAMA_BASE_URL", None)
+        prev_timeout = os.environ.pop("VYOMA_OLLAMA_TIMEOUT", None)
+        os.environ["VYOMA_OLLAMA_BASE_URL"] = "http://127.0.0.1:59977"
+        os.environ["VYOMA_OLLAMA_TIMEOUT"] = "5"
+        try:
+            resp = client.post(
+                f"/api/tasks/{body['task_id']}/process",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        finally:
+            if prev_base is None:
+                os.environ.pop("VYOMA_OLLAMA_BASE_URL", None)
+            else:
+                os.environ["VYOMA_OLLAMA_BASE_URL"] = prev_base
+            if prev_timeout is None:
+                os.environ.pop("VYOMA_OLLAMA_TIMEOUT", None)
+            else:
+                os.environ["VYOMA_OLLAMA_TIMEOUT"] = prev_timeout
+        self.assertEqual(resp.json()["status"], "FAILED")
+        self.assertIn("Ollama", resp.json()["error"])
+
     def test_active_permit_drives_overlap_evidence(self) -> None:
         token = self._seed_user("off6", "SAFETY_OFFICER")
         envelope = _discard_overlap(_load_fixture("conflict_case.json"))

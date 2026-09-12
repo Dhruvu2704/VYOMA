@@ -1,0 +1,86 @@
+{
+  "scenario": "unknown-tag",
+  "description": "Synthetic MockRefinery unknown-equipment-tag case. The PTW cites equipment tag UNK-700 which does not exist anywhere in the P&ID/graph data, so the graph layer cannot resolve it. Intended outcome: FLAGGED / FLAGGED / AGREE / FLAGGED_FOR_REVIEW / human review, triggered by unresolved-tags.",
+  "disclaimer": "This fixture contains purely synthetic MockRefinery-style data. It does NOT contain, reference, or represent any real MRPL proprietary data.",
+  "task_request": {
+    "permit_id": "MR-0035-UNK",
+    "task_type": "ptw_review",
+    "document_refs": ["mock:ptw/unk_0035.json"],
+    "context": {"simulated_source": "Role2-mock", "graph_source": "Role3-mock"}
+  },
+  "structured_ptw": {
+    "permit_id": "MR-0035-UNK",
+    "work_type": "cold-work",
+    "scope": "Replace a relief valve on line LF-700; the vent-line equipment tag UNK-700 could not be matched against the tag master.",
+    "location": ["Unit-14", "Relief-Deck"],
+    "start_time": "2026-09-06T08:30:00Z",
+    "end_time": "2026-09-06T12:30:00Z",
+    "issuer": "mock-issuer",
+    "raw_document_ref": "mock:ptw/unk_0035.json",
+    "equipment_tags": ["LF-700", "RV-701", "UNK-700"],
+    "isolation_points": [],
+    "field_confidence": {
+      "permit_id": 1.0,
+      "work_type": 0.98,
+      "scope": 0.9,
+      "equipment_tags": 0.62,
+      "isolation_points": 1.0
+    },
+    "low_confidence_fields": ["equipment_tags"]
+  },
+  "structured_pid": {
+    "pid_id": "PID-UNK-0035",
+    "source": "mock:pid/unk_0035.dwg",
+    "equipment_tags": ["LF-700", "RV-701"],
+    "symbols": [
+      {
+        "symbol_id": "LF-700",
+        "symbol_type": "LINE",
+        "properties": {"line_class": "process", "tag_resolved": true},
+        "connections": ["RV-701"]
+      },
+      {
+        "symbol_id": "RV-701",
+        "symbol_type": "VALVE",
+        "properties": {"service": "relief", "tag_resolved": true},
+        "connections": ["LF-700"]
+      }
+    ],
+    "connections": [
+      {"source": "LF-700", "target": "RV-701", "line_ref": "LF-700"}
+    ],
+    "unresolved_symbols": [],
+    "field_confidence": {
+      "equipment_tags": 0.9,
+      "symbols": 0.9,
+      "connections": 0.88,
+      "unresolved_symbols": 1.0
+    },
+    "low_confidence_fields": []
+  },
+  "graph_facts": {
+    "permit_id": "MR-0035-UNK",
+    "resolved_nodes": ["LF-700", "RV-701"],
+    "unresolved_tags": ["UNK-700"],
+    "connected_equipment": {
+      "LF-700": ["RV-701"]
+    },
+    "active_isolations": [],
+    "overlap_check": {
+      "overlapping_permits": [],
+      "same_area_active": false
+    }
+  },
+  "rule_verdict": {
+    "permit_id": "MR-0035-UNK",
+    "conflicting_permit_ids": [],
+    "rules_triggered": ["unresolved-tags"],
+    "rule_result": "FLAGGED",
+    "explanation": "Equipment tag UNK-700 cited on the permit does not resolve against the plant graph.",
+    "confidence": "LOW"
+  },
+  "expected_llm_result": "FLAGGED",
+  "expected_agreement": "AGREE",
+  "expected_final_decision": "FLAGGED_FOR_REVIEW",
+  "expected_human_review": true
+}
