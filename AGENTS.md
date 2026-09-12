@@ -1,14 +1,20 @@
 # AGENTS.md
 
-## Status: empty scaffold
+## Status: working local stack
 
-This repository has **no commits yet** and **no working code**. Every tracked
-source file is currently empty (0 bytes). There is no README, no manifest
-(`pyproject.toml`, `package.json`, etc.), no lockfile, no build/test/lint config,
-and no CI.
+The repo is now a working Python (backend + `ai_agent`) and Next.js (frontend)
+project. See `DEMO.md` for the one-line demo startup.
 
-Do not assume any package, dependency, or command exists. Verify before relying
-on anything; it almost certainly does not exist yet.
+- `scripts/start_demo.ps1` — brings up the full stack reproducibly from one
+  command (kills stale port-8000/3000 listeners, ensures Ollama on 11434,
+  runs `scripts/seed_demo_user.py`, starts backend + built frontend, polls
+  until healthy). Re-runnable; prints URLs + demo credentials.
+- `scripts/seed_demo_user.py` — idempotent seeder for the `officer`
+  `SAFETY_OFFICER` demo account (fixed password `pass`, demo-only).
+- Verification baseline: `python -B -m unittest discover -s tests -p "test_*.py"`
+  = 525 tests; frontend `pnpm exec tsc --noEmit` and `pnpm build` are clean.
+- Runtime artifacts (`vyoma.db`, `uploads/`, `outputs/`, `frontend/.next`) are
+  gitignored — a fresh run creates them from the demo script.
 
 ## Intended layout (from directory structure only)
 
