@@ -149,6 +149,10 @@ export interface BackendTask {
   scenario: string
   audit_ref: string | null
   error: string | null
+  review_status: string | null
+  reviewed_by: number | null
+  review_reason: string | null
+  reviewed_at: string | null
   result: BackendTaskResult | null
   deliverables: BackendDeliverable[]
 }
@@ -325,15 +329,21 @@ export async function getSecurityStatus(): Promise<SecurityStatus> {
 }
 
 // ---------------------------------------------------------------------------
-// Review (client-side only — no backend review endpoint exists)
+// Task review (persistent backend sign-off)
 // ---------------------------------------------------------------------------
 
 export async function submitReview(
-  decision: string,
-  notes: string,
-): Promise<{ recorded: true; note: string }> {
-  return {
-    recorded: true,
-    note: `Sign-off recorded client-side (${decision}). A backend review endpoint does not yet exist.`,
-  }
+  taskId: string,
+  decision: 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES',
+  reason: string,
+): Promise<BackendTask> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/review`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, reason }),
+    },
+  )
+  return unwrap<BackendTask>(res)
 }

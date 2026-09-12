@@ -40,6 +40,10 @@ export interface VerdictModel {
   reasoningProvider: string | null
   deterministicEvaluated: boolean
   auditRef: string | null
+  reviewStatus: string | null
+  reviewedBy: number | null
+  reviewReason: string | null
+  reviewedAt: string | null
   executionTrace: ExecutionTraceStep[]
   retrievedKnowledge: RetrievedChunk[]
 }
@@ -51,6 +55,10 @@ interface VerdictTask {
   permit_id: string
   scenario: string
   audit_ref: string | null
+  review_status: string | null
+  reviewed_by: number | null
+  review_reason: string | null
+  reviewed_at: string | null
   result: {
     deterministic_safety_evaluated: boolean | null
     rule_result: string | null
@@ -113,6 +121,10 @@ export function buildVerdictModel(task: VerdictTask): VerdictModel {
     reasoningProvider: r?.reasoning_provider ?? null,
     deterministicEvaluated: r?.deterministic_safety_evaluated ?? false,
     auditRef: task.audit_ref,
+    reviewStatus: task.review_status ?? null,
+    reviewedBy: task.reviewed_by ?? null,
+    reviewReason: task.review_reason ?? null,
+    reviewedAt: task.reviewed_at ?? null,
     executionTrace: (r?.execution_trace ?? []).map((step) => ({
       stage: step.stage,
       status: step.status,

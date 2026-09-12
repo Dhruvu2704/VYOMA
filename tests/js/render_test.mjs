@@ -195,4 +195,8 @@ const FAILED_TASK = {
 }
 
 console.log("render_test.mjs: all assertions passed");
-process.exit(0);
+// Let the event loop drain instead of forcing teardown with process.exit(0):
+// on Windows, calling process.exit() while the top-level await import is
+// still wrapping up can trip a libuv async-handle closing assertion and abort
+// the process (exit code 0xC0000409) even though every assertion passed.
+process.exitCode = 0;

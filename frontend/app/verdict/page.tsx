@@ -237,7 +237,16 @@ export default function VerdictPage() {
       {/* Human review */}
       {v.requiresHumanReview && (
         <div className="mt-6">
-          <ReviewPanel ruleResult={v.ruleResult} llmResult={v.llmResult} agreement={v.agreement} />
+          <ReviewPanel
+            taskId={v.taskId}
+            ruleResult={v.ruleResult}
+            llmResult={v.llmResult}
+            agreement={v.agreement}
+            reviewStatus={v.reviewStatus}
+            reviewedBy={v.reviewedBy}
+            reviewReason={v.reviewReason}
+            reviewedAt={v.reviewedAt}
+          />
         </div>
       )}
 

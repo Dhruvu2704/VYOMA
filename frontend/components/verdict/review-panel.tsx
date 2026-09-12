@@ -1,30 +1,64 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, ShieldCheck, ShieldX, Loader2, AlertTriangle } from 'lucide-react'
+import {
+  CheckCircle2,
+  ShieldCheck,
+  ShieldX,
+  Loader2,
+  AlertTriangle,
+  RefreshCcw,
+} from 'lucide-react'
 import { Panel } from '@/components/panel'
 import { StatusBadge } from '@/components/status-badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/toast'
 import { getCurrentUser, submitReview } from '@/lib/api'
 
+type Decision = 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES' | null
+
 export function ReviewPanel({
+  taskId,
   ruleResult,
   llmResult,
   agreement,
+  reviewStatus,
+  reviewedBy,
+  reviewReason,
+  reviewedAt,
 }: {
+  taskId: string
   ruleResult: string
   llmResult: string
   agreement: string
+  reviewStatus: string | null
+  reviewedBy: number | null
+  reviewReason: string | null
+  reviewedAt: string | null
 }) {
   const toast = useToast()
-  const [decision, setDecision] = useState<'APPROVE' | 'REJECT' | null>(null)
+  const [decision, setDecision] = useState<Decision>(null)
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
-  const [resultNote, setResultNote] = useState('')
+  const [recorded, setRecorded] = useState<{
+    status: string
+    reason: string | null
+    reviewedBy: number | null
+    reviewedAt: string | null
+  } | null>(null)
 
   const officer = getCurrentUser()
+
+  // The persisted review (from the backend payload, or from the submit
+  // response) always wins — there is no client-side-only recording.
+  const reviewedView = (reviewStatus ?? recorded?.status ?? null)
+    ? {
+        status: reviewStatus ?? recorded?.status ?? 'APPROVED',
+        reason: reviewReason ?? recorded?.reason ?? null,
+        reviewer: reviewedBy ?? recorded?.reviewedBy ?? null,
+        at: reviewedAt ?? recorded?.reviewedAt ?? null,
+      }
+    : null
 
   const submit = async () => {
     if (!decision || notes.trim().length < 5) {
@@ -33,10 +67,21 @@ export function ReviewPanel({
     }
     setSubmitting(true)
     try {
-      const result = await submitReview(decision, notes)
-      setResultNote(result.note)
-      setDone(true)
-      toast.push({ kind: 'success', title: 'Decision recorded', message: 'Recorded locally; sign-off reaches the audit ledger through the plant system.' })
+      const task = await submitReview(taskId, decision, notes.trim())
+      const responseStatus = task.review_status ?? null
+      if (responseStatus) {
+        setRecorded({
+          status: responseStatus,
+          reason: task.review_reason ?? notes.trim(),
+          reviewedBy: task.reviewed_by ?? null,
+          reviewedAt: task.reviewed_at ?? null,
+        })
+      }
+      toast.push({
+        kind: 'success',
+        title: 'Decision recorded',
+        message: `Sign-off recorded for ${taskId} and appended to the audit log.`,
+      })
     } catch (error) {
       toast.push({
         kind: 'error',
@@ -48,23 +93,49 @@ export function ReviewPanel({
     }
   }
 
-  if (done) {
+  if (reviewedView) {
+    const safe = reviewedView.status === 'APPROVED'
+    const rejected = reviewedView.status === 'REJECTED'
     return (
-      <Panel className="border-safe/40 p-6 glow-safe">
+      <Panel
+        className={cn(
+          'p-6',
+          safe && 'border-safe/40 glow-safe',
+          rejected && 'border-danger/40 glow-danger',
+          !safe && !rejected && 'border-warning/40 glow-warning',
+        )}
+      >
         <div className="flex items-center gap-3">
-          <CheckCircle2 className="size-8 text-safe" />
+          {safe ? (
+            <CheckCircle2 className="size-8 text-safe" />
+          ) : rejected ? (
+            <ShieldX className="size-8 text-danger" />
+          ) : (
+            <RefreshCcw className="size-8 text-warning" />
+          )}
           <div>
             <p className="text-lg font-bold text-foreground">Decision recorded</p>
             <p className="text-sm text-muted-foreground">
-              Sign-off by {officer ? officer.toUpperCase() : 'anonymous'} was recorded in this session.
+              Sign-off by{' '}
+              {reviewedView.reviewer
+                ? `officer #${reviewedView.reviewer}`
+                : officer
+                  ? officer.toUpperCase()
+                  : 'the safety officer'}{' '}
+              is persisted on this task.
             </p>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/50 p-3 font-mono text-xs">
           <span className="text-muted-foreground">DECISION</span>
-          <StatusBadge value={decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'} size="sm" />
-          <span className="text-foreground">{resultNote || 'Client-side record'}</span>
+          <StatusBadge value={reviewedView.status} size="sm" />
+          {reviewedView.reason && <span className="text-foreground">{reviewedView.reason}</span>}
         </div>
+        {reviewedView.at && (
+          <p className="mt-3 font-mono text-xs text-muted-foreground">
+            Recorded at {new Date(reviewedView.at).toLocaleString()}
+          </p>
+        )}
       </Panel>
     )
   }
@@ -95,7 +166,7 @@ export function ReviewPanel({
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Officer Decision
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <button
               onClick={() => setDecision('APPROVE')}
               className={cn(
@@ -117,6 +188,17 @@ export function ReviewPanel({
               )}
             >
               <ShieldX className="size-4" /> Reject Permit
+            </button>
+            <button
+              onClick={() => setDecision('REQUEST_CHANGES')}
+              className={cn(
+                'flex items-center justify-center gap-2 rounded-md border py-3 text-sm font-bold uppercase tracking-wide transition-all',
+                decision === 'REQUEST_CHANGES'
+                  ? 'border-warning bg-warning/15 text-warning glow-warning'
+                  : 'border-border bg-background/40 text-foreground hover:border-warning/50',
+              )}
+            >
+              <RefreshCcw className="size-4" /> Request Changes
             </button>
           </div>
         </div>
