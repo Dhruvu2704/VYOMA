@@ -1,16 +1,104 @@
 """PTW OCR processing for the Role 2 OCR + Vision pipeline.
 
 Current implementation:
-    Mock-first OCR text processing.
+    - extract_text_from_mock : mock OCR output for tests and fixtures.
+    - extract_text_from_image: real, fully-offline OCR using the local
+      Tesseract binary (via pytesseract + Pillow). No cloud OCR is used.
 
-This module provides a stable interface for PTW OCR processing without
-requiring an OCR engine during the MVP stage. A real OCR backend can later
-be connected without changing the downstream StructuredPTW contract.
+A real OCR backend can be connected without changing the downstream
+StructuredPTW contract.
 """
 
 from __future__ import annotations
 
+import os
+import shutil
+from pathlib import Path
 from typing import Any, Dict
+
+import pytesseract
+from PIL import Image
+
+
+def _resolve_tesseract_binary() -> str:
+    """Resolve the local Tesseract binary used by pytesseract.
+
+    Prefers an explicitly configured or on-PATH tesseract, then falls back
+    to the standard Windows install locations. Raises ValueError if no
+    local binary can be found, so callers never silently fall back to a
+    cloud OCR service.
+    """
+
+    configured = pytesseract.pytesseract.tesseract_cmd
+    if configured and (Path(configured).is_file() or shutil.which(configured)):
+        return configured
+
+    for candidate in (
+        os.environ.get("TESSERACT_CMD"),
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        shutil.which("tesseract"),
+    ):
+        if candidate and os.path.isfile(candidate):
+            pytesseract.pytesseract.tesseract_cmd = candidate
+            return candidate
+
+    raise ValueError(
+        "Tesseract OCR binary not found. Install Tesseract OCR locally "
+        "(e.g. 'winget install UB-Mannheim.TesseractOCR') or set the "
+        "TESSERACT_CMD environment variable to the tesseract.exe path."
+    )
+
+
+def extract_text_from_image(
+    image_path: str,
+) -> Dict[str, Any]:
+    """Extract text from a real image using the local Tesseract OCR engine.
+
+    Runs entirely offline on this machine: the image is decoded locally
+    with Pillow and passed to the locally installed tesseract binary via
+    pytesseract. No cloud OCR or vision API is used.
+
+    Returns the same ``{"source": ..., "text": ...}`` shape as
+    extract_text_from_mock so the downstream contract is unchanged. The
+    extracted text is normalized with normalize_ocr_text.
+
+    Raises:
+        ValueError: If image_path is missing, not a readable image file,
+            or no local tesseract binary can be resolved.
+    """
+
+    if not isinstance(image_path, str) or not image_path.strip():
+        raise ValueError(
+            "OCR image path must be a non-empty string."
+        )
+
+    path = Path(image_path)
+    if not path.is_file():
+        raise ValueError(
+            f"OCR image file not found: {image_path}"
+        )
+
+    _resolve_tesseract_binary()
+
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            extracted = pytesseract.image_to_string(
+                image,
+                lang="eng",
+                config="--psm 6",
+            )
+    except (Image.UnidentifiedImageError, OSError, pytesseract.TesseractError) as exc:
+        raise ValueError(
+            f"OCR image could not be read: {image_path} ({exc})"
+        ) from exc
+
+    return {
+        "source": image_path,
+        "text": normalize_ocr_text(extracted),
+    }
 
 
 def extract_text_from_mock(

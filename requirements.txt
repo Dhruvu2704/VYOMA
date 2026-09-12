@@ -8,3 +8,5 @@ uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 psutil>=5.9
 PyJWT>=2.8
+pillow>=10.1
+pytesseract>=0.3.10
