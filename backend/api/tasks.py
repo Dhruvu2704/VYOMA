@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +29,7 @@ from sqlalchemy.orm import Session
 from backend.config import MAX_UPLOAD_BYTES, UPLOAD_DIR
 from backend.db.database import get_db
 from backend.db.models import Deliverable, Task
+from backend.services.audit_logger import AuditLogger
 from backend.services.auth import get_current_user
 from backend.services.kavach import KavachConnector
 from backend.services.permissions import require_tool_permission
@@ -62,6 +64,11 @@ def _iso(value) -> Optional[str]:
     return value.isoformat() if value is not None else None
 
 
+class ReviewRequest(BaseModel):
+    decision: str
+    reason: str
+
+
 def _deliverables(db: Session, task_id: int) -> List[Dict[str, Any]]:
     rows = db.query(Deliverable).filter(Deliverable.task_id == task_id).all()
     return [
@@ -93,6 +100,10 @@ def _serialize_task(db: Session, task: Task) -> Dict[str, Any]:
         "scenario": task.scenario,
         "audit_ref": task.audit_ref,
         "error": task.error,
+        "review_status": task.review_status,
+        "reviewed_by": task.reviewed_by,
+        "review_reason": task.review_reason,
+        "reviewed_at": _iso(task.reviewed_at),
         "result": result,
         "deliverables": _deliverables(db, task.id),
     }
@@ -227,6 +238,89 @@ def process_task_endpoint(
 
     connector = get_connector(request)
     process_task(db, task, connector)
+    return _serialize_task(db, task)
+
+
+DECISION_TO_REVIEW_STATUS = {
+    "APPROVE": "APPROVED",
+    "REJECT": "REJECTED",
+    "REQUEST_CHANGES": "CHANGES_REQUESTED",
+}
+
+
+@router.post("/{task_id}/review")
+def review_task_endpoint(
+    task_id: str,
+    body: ReviewRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_user),
+):
+    require_tool_permission(current_user, "review_task")
+
+    try:
+        numeric_id = _resolve_task_id(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid task ID format") from exc
+
+    task = db.query(Task).filter(Task.id == numeric_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    decision = body.decision.strip()
+    reason = body.reason.strip()
+    if decision not in DECISION_TO_REVIEW_STATUS:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid decision; expected APPROVE, REJECT or REQUEST_CHANGES",
+        )
+    if not reason:
+        raise HTTPException(status_code=400, detail="Review reason is required")
+
+    result = None
+    if task.result_json:
+        try:
+            result = json.loads(task.result_json)
+        except json.JSONDecodeError:
+            result = None
+    final_verdict = (result or {}).get("final_verdict") or {}
+    decided = bool(final_verdict) or bool(
+        (result or {}).get("final_decision")
+    )
+    requires_review = bool(
+        final_verdict.get("requires_human_review")
+        if final_verdict
+        else (result or {}).get("requires_human_review")
+    )
+    if not decided or not requires_review:
+        raise HTTPException(status_code=400, detail="Task is not reviewable")
+
+    if task.review_status is not None:
+        raise HTTPException(status_code=409, detail="Task already reviewed")
+
+    now = datetime.utcnow()
+    task.review_status = DECISION_TO_REVIEW_STATUS[decision]
+    task.reviewed_by = current_user["user_id"]
+    task.review_reason = reason
+    task.reviewed_at = now
+    db.commit()
+    db.refresh(task)
+
+    event = AuditLogger().create_event(
+        audit_ref=f"REVIEW-{task.id}-{uuid.uuid4().hex[:8]}",
+        permit_id=task.permit_id or "",
+        timestamp=now.isoformat(),
+        pipeline=["human_review"],
+        stages=json.dumps(
+            {
+                "decision": decision,
+                "reason": reason,
+                "reviewed_by": current_user["user_id"],
+            }
+        ),
+        sequence=f"review:{task.id}",
+    )
+    AuditLogger().save_event(db, event)
+
     return _serialize_task(db, task)
 
 

@@ -9,6 +9,7 @@ TOOL_PERMISSIONS = {
     "upload_document": ["USER", "SAFETY_OFFICER", "ADMIN"],
     "run_safety_analysis": ["SAFETY_OFFICER", "ADMIN"],
     "close_permit": ["SAFETY_OFFICER", "ADMIN"],
+    "review_task": ["SAFETY_OFFICER", "ADMIN"],
     "view_audit_logs": ["SAFETY_OFFICER", "ADMIN"],
     "manage_users": ["ADMIN"],
 }

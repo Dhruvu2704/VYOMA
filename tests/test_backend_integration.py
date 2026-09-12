@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from backend.db.database import Base, SessionLocal, engine  # noqa: E402
 from backend.db.models import AuditLog, Permit, User  # noqa: E402
 from backend.main import create_app  # noqa: E402
+from backend.services.audit_logger import AuditLogger  # noqa: E402
 from backend.services.kavach import KavachConnector, DEFAULT_ENTRYPOINT  # noqa: E402
 from backend.services.password import hash_password  # noqa: E402
 
@@ -126,6 +127,25 @@ class BackendIntegrationTest(unittest.TestCase):
             f"/api/tasks/{task_id}/process",
             headers={"Authorization": f"Bearer {token}"},
         ).json()
+
+    def _review(
+        self,
+        task_id: str,
+        token: str,
+        decision: str,
+        reason: str,
+    ) -> Any:
+        return self.client.post(
+            f"/api/tasks/{task_id}/review",
+            json={"decision": decision, "reason": reason},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    def _reviewable_task(self, token: str) -> Dict[str, Any]:
+        body = self._upload("conflict_case.json", token)
+        result = self._process(body["task_id"], token)
+        self.assertTrue(result["result"]["requires_human_review"])
+        return body
 
     def test_health_endpoint(self) -> None:
         resp = self.client.get("/api/health")
@@ -397,6 +417,143 @@ class BackendIntegrationTest(unittest.TestCase):
         result = self._process(body["task_id"], token)
         self.assertEqual(result["result"]["final_decision"], "PASS")
         self.assertFalse(result["result"]["requires_human_review"])
+
+    def test_safety_officer_review_recorded_and_final_unchanged(self) -> None:
+        token = self._seed_user("rev1", "SAFETY_OFFICER")
+        body = self._reviewable_task(token)
+        processed = self.client.get(
+            f"/api/tasks/{body['task_id']}",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+        self.assertEqual(
+            processed["result"]["final_decision"], "FLAGGED_FOR_REVIEW"
+        )
+
+        resp = self._review(
+            body["task_id"],
+            token,
+            "APPROVE",
+            "Isolation confirmed on site; safe to proceed.",
+        )
+        self.assertEqual(resp.status_code, 200)
+        reviewed = resp.json()
+        self.assertEqual(reviewed["review_status"], "APPROVED")
+        self.assertEqual(
+            reviewed["review_reason"], "Isolation confirmed on site; safe to proceed."
+        )
+        self.assertIsNotNone(reviewed["reviewed_by"])
+        self.assertIsNotNone(reviewed["reviewed_at"])
+        with SessionLocal() as db:
+            reviewer_id = (
+                db.query(User).filter(User.username == "rev1").first().id
+            )
+        self.assertEqual(reviewed["reviewed_by"], reviewer_id)
+        self.assertEqual(
+            reviewed["result"]["final_decision"], "FLAGGED_FOR_REVIEW"
+        )
+        self.assertTrue(reviewed["result"]["requires_human_review"])
+
+    def test_review_persists_across_db_session_reload(self) -> None:
+        token = self._seed_user("rev2", "SAFETY_OFFICER")
+        body = self._reviewable_task(token)
+
+        resp = self._review(
+            body["task_id"], token, "REJECT", "Missing gas test certificate."
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        fresh = self.client.get(
+            f"/api/tasks/{body['task_id']}",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+        self.assertEqual(fresh["review_status"], "REJECTED")
+        self.assertEqual(fresh["review_reason"], "Missing gas test certificate.")
+        self.assertIsNotNone(fresh["reviewed_at"])
+        self.assertEqual(
+            fresh["result"]["final_decision"], "FLAGGED_FOR_REVIEW"
+        )
+
+    def test_user_role_cannot_review(self) -> None:
+        officer = self._seed_user("rev_officer", "SAFETY_OFFICER")
+        body = self._reviewable_task(officer)
+        user = self._seed_user("rev3", "USER")
+        resp = self._review(
+            body["task_id"], user, "APPROVE", "Approving as a regular user."
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_non_reviewable_task_rejected(self) -> None:
+        token = self._seed_user("rev4", "SAFETY_OFFICER")
+        body = self._upload("safe_case.json", token)
+        self._process(body["task_id"], token)
+        resp = self._review(body["task_id"], token, "APPROVE", "OK to approve.")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not reviewable", resp.json()["detail"])
+
+    def test_review_without_verdict_rejected(self) -> None:
+        token = self._seed_user("rev5", "SAFETY_OFFICER")
+        body = self._upload("conflict_case.json", token)
+        resp = self._review(body["task_id"], token, "APPROVE", "Never processed.")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not reviewable", resp.json()["detail"])
+
+    def test_already_reviewed_task_conflict(self) -> None:
+        token = self._seed_user("rev6", "SAFETY_OFFICER")
+        body = self._reviewable_task(token)
+        first = self._review(body["task_id"], token, "APPROVE", "Looks good.")
+        self.assertEqual(first.status_code, 200)
+        second = self._review(
+            body["task_id"], token, "REQUEST_CHANGES", "Changed my mind."
+        )
+        self.assertEqual(second.status_code, 409)
+        self.assertIn("already reviewed", second.json()["detail"])
+
+    def test_blank_reason_rejected(self) -> None:
+        token = self._seed_user("rev7", "SAFETY_OFFICER")
+        body = self._reviewable_task(token)
+        resp = self._review(body["task_id"], token, "APPROVE", "   ")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("reason", resp.json()["detail"])
+        missing = self.client.post(
+            f"/api/tasks/{body['task_id']}/review",
+            json={"decision": "APPROVE"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(missing.status_code, 422)
+
+    def test_invalid_decision_rejected(self) -> None:
+        token = self._seed_user("rev8", "SAFETY_OFFICER")
+        body = self._reviewable_task(token)
+        resp = self._review(body["task_id"], token, "MAYBE", "Unsure.")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("decision", resp.json()["detail"])
+
+    def test_review_event_in_audit_chain(self) -> None:
+        token = self._seed_user("rev9", "SAFETY_OFFICER")
+        body = self._reviewable_task(token)
+        resp = self._review(
+            body["task_id"], token, "REQUEST_CHANGES", "Redraw the isolation sketch."
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        with SessionLocal() as db:
+            rows = (
+                db.query(AuditLog)
+                .filter(AuditLog.pipeline == "human_review")
+                .all()
+            )
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertTrue(row.audit_ref.startswith("REVIEW-"))
+            self.assertEqual(row.permit_id, "MR-0002-CONF")
+            self.assertIn("REQUEST_CHANGES", row.stages)
+            self.assertIn("redraw the isolation sketch", row.stages.lower())
+            self.assertEqual(row.sequence, f"review:{self._task_numeric(body)}")
+            self.assertTrue(AuditLogger().verify_chain(db))
+
+    @staticmethod
+    def _task_numeric(body: Dict[str, Any]) -> int:
+        return int(body["task_id"].replace("TASK-", ""))
 
     def test_audit_chain_verifiable_and_tamper_detected(self) -> None:
         token = self._seed_user("off9", "SAFETY_OFFICER")
