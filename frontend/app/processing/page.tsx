@@ -52,7 +52,18 @@ export default function ProcessingPage() {
   const [log, setLog] = useState<{ time: string; msg: string }[]>([])
   const logRef = useRef<HTMLDivElement>(null)
   const startedRef = useRef(false)
+  const queueNotedRef = useRef(false)
+  const completedLoggedRef = useRef(false)
   useNow()
+
+  // Log the completion lines exactly once, regardless of how many poll cycles
+  // observe the COMPLETED status afterwards.
+  const logCompletion = (auditRef: string | null | undefined) => {
+    if (completedLoggedRef.current) return
+    completedLoggedRef.current = true
+    if (auditRef) pushLog(`Audit record written: ${auditRef}`)
+    pushLog('Final verdict recorded')
+  }
 
   // Load the task id handed over by the New Inspection flow.
   useEffect(() => {
@@ -97,8 +108,7 @@ export default function ProcessingPage() {
                   ? `Verification complete via ${provider}`
                   : 'Verification complete (deterministic rule result stands)',
               )
-              if (processed.audit_ref) pushLog(`Audit record written: ${processed.audit_ref}`)
-              pushLog('Final verdict recorded')
+              logCompletion(processed.audit_ref)
             } else if (processed.status === 'FAILED') {
               setProgress(0)
               setFailedError(processed.error ?? 'KAVACH processing failed')
@@ -110,14 +120,16 @@ export default function ProcessingPage() {
             setFailedError(error instanceof Error ? error.message : 'KAVACH processing failed')
           }
         } else {
-          pushLog('Task already queued — awaiting worker')
+          if (!queueNotedRef.current) {
+            queueNotedRef.current = true
+            pushLog('Task already queued — awaiting worker')
+          }
         }
       } else if (task.status === 'PROCESSING') {
         setProgress((p) => Math.min(90, Math.max(p, 45)))
       } else if (task.status === 'COMPLETED') {
         setProgress(100)
-        if (task.audit_ref) pushLog(`Audit record written: ${task.audit_ref}`)
-        pushLog('Final verdict recorded')
+        logCompletion(task.audit_ref)
       } else if (task.status === 'FAILED') {
         setProgress(0)
         setFailedError(task.error ?? 'KAVACH processing failed')

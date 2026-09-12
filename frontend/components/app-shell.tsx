@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { StatusDot } from '@/components/status-badge'
-import { getCurrentUser, getHealth, isAuthed, logout } from '@/lib/api'
+import { getCurrentUser, getHealth, getSecurityStatus, isAuthed, logout } from '@/lib/api'
 import { AuthModal, openAuth } from '@/components/auth-modal'
 
 const nav = [
@@ -61,6 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [userMenu, setUserMenu] = useState(false)
   const [user, setUser] = useState<string | null>(null)
   const [apiUp, setApiUp] = useState<boolean | null>(null)
+  const [egressActive, setEgressActive] = useState<boolean | null>(null)
 
   const refreshUser = () => setUser(getCurrentUser())
 
@@ -69,6 +70,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     getHealth()
       .then(() => setApiUp(true))
       .catch(() => setApiUp(false))
+    getSecurityStatus()
+      .then((s) => setEgressActive(s.external_observed_since_start === 0))
+      .catch(() => setEgressActive(null))
   }, [])
 
   const signOut = () => {
@@ -150,8 +154,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 Backend {apiConnected ? 'Connected' : apiKnown ? 'OFFLINE' : 'Connecting'}
               </div>
               <div className="flex items-center gap-2 text-foreground">
-                <StatusDot tone="safe" />
-                Zero-Egress Active
+                <StatusDot tone={egressActive === false ? 'danger' : 'safe'} pulse={egressActive === null} />
+                {egressActive === null
+                  ? 'Egress status…'
+                  : egressActive
+                    ? 'Zero-Egress Active'
+                    : 'Egress Observed'}
               </div>
             </div>
           </div>
